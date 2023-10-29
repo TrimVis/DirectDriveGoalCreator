@@ -1,0 +1,56 @@
+num_ranks 6
+
+rank 0 {
+// 
+s0: send 1b to 4
+s4: recv 1b from 4
+s4 requires s0
+s5: send 1b to 5 tag 5
+s9: recv 1b from 5 tag 5
+s9 requires s5
+s10: send 1024b to 4 tag 10
+s19: recv 1b from 4 tag 18
+s19 requires s10
+}
+
+rank 1 {
+// 
+}
+
+rank 2 {
+// 
+}
+
+rank 3 {
+// 
+}
+
+rank 4 {
+// 
+s1: recv 1b from 0
+c2: calc 200
+s3: send 1b to 0
+s3 requires s1
+s11: recv 1024b from 0 tag 10
+c12: calc 200
+c12 requires s11
+s13: send 1024b to 5 tag 13
+s17: recv 1b from 5 tag 16
+s13 requires c12
+s17 requires s13
+s18: send 1b to 0 tag 18
+s18 requires s17
+}
+
+rank 5 {
+// 
+s6: recv 1b from 0 tag 5
+c7: calc 200
+s8: send 1b to 0 tag 5
+s8 requires s6
+s14: recv 1024b from 4 tag 13
+c15: calc 200
+s16: send 1b to 4 tag 16
+s16 requires c15
+c15 requires s14
+}
