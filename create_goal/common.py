@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import Tuple, List
 
 Addr = int
@@ -14,9 +13,3 @@ SliceMap = List[SliceRange]
 SliceResponsibility = List[CcsId]
 # CcsId to corresponding BssIds mapping
 BssResponsibility = List[List[BssId]]
-
-
-class InteractionKind(Enum):
-    READ = "read"
-    WRITE = "write"
-    MOUNT = "mount"

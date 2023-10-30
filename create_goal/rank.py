@@ -11,26 +11,25 @@ class RankBuilder:
                  get_new_label: Callable[[Optional[str]], str]):
         self.rank_id = rank_id
         self.get_new_label = get_new_label
-        self._lines = []
+        self._lines = [f"rank {self.rank_id} {{"]
+        # + '\n'.join(self._lines) + "}"
 
     def add_send(self, len: int, to_rank: int,
                  tag: Optional[int] = None) -> str:
         label = self.get_new_label('s')
 
-        line = f"{label}: send {len}b to {to_rank}"
-        if tag:
-            line = f"{line} tag {tag}"
+        line = f"{label}: send {len}b to {to_rank}" + \
+            (f" tag {tag}" if tag else "")
 
         self._lines.append(line)
         return label
 
     def add_recv(self, len: int, from_rank: int,
                  tag: Optional[int] = None) -> str:
-        label = self.get_new_label('s')
+        label = self.get_new_label('r')
 
-        line = f"{label}: recv {len}b from {from_rank}"
-        if tag:
-            line = f"{line} tag {tag}"
+        line = f"{label}: recv {len}b from {from_rank}" + \
+            (f" tag {tag}" if tag else "")
 
         self._lines.append(line)
         return label
@@ -51,5 +50,7 @@ class RankBuilder:
         self._lines.append(line)
 
     def serialize(self):
-        output_lines = [f"rank {self.rank_id} {{", *self._lines, "}"]
-        return '\n'.join(output_lines)
+        self._lines.append("}")
+        result = '\n'.join(self._lines)
+        self._lines.pop()
+        return result
