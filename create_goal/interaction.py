@@ -61,13 +61,24 @@ def inject_mount(network: 'DirectDriveNetwork', host_id: int):
     mds_builder.require_dependency(lbl_mds_resp, lbl_mds_load)
 
 
-# TODO pjordan: We got some optimization potential here
 def resolve_to_slices_and_sizes(slice_map: SliceMap, data_start: int, data_end: int) -> List[Tuple[SliceId, int]]:
-    return [
-        (sid, min(end, data_end) - min(start, data_start))
-        for (sid, (start, end)) in enumerate(slice_map)
-        if end >= data_start and data_end >= start
-    ]
+    # results = [
+    #     (sid, min(end, data_end) - min(start, data_start))
+    #     for (sid, (start, end)) in enumerate(slice_map)
+    #     if end >= data_start and data_end >= start
+    # ]
+
+    # By doing this manually we can terminate early by only looking once at the data
+    results = []
+    for (sid, (start, end)) in enumerate(slice_map):
+        if end < data_start:
+            continue
+        if data_end < start:
+            break
+        dist = min(end, data_end) - min(start, data_start)
+        results.append((sid, dist))
+
+    return results
 
 
 def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length: int):
@@ -153,7 +164,8 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
     get_new_tag = network.get_next_tag
     get_builder = network.get_builder
 
-    slice_ids = resolve_to_slices_and_sizes(network.slice_map, start, start + length)
+    slice_ids = resolve_to_slices_and_sizes(
+        network.slice_map, start, start + length)
 
     host_rank = network.topology.get_host(host_id)
     host_builder = get_builder(host_rank)
