@@ -6,7 +6,7 @@ from tqdm import tqdm
 from network import NetworkTopology, DirectDriveNetwork
 from trace2goal import parse_trace
 
-testing = True
+testing = False
 
 if testing:
     host_count = 16

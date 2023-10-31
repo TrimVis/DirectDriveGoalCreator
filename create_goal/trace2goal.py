@@ -26,6 +26,9 @@ def parse_trace(trace_path: str, out_path: str):
             disk_size = max(int(lba) + int(size), disk_size)
             csv_line_no += 1
 
+    # TODO pjordan: Better value required, just make sure to cap this
+    slice_size = disk_size / 1024
+
     # Create Network Topology
     topology = NetworkTopology(
         host_count=host_count,
