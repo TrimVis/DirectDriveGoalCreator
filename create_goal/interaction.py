@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 from common import Addr, SliceId, SliceMap
 
@@ -62,19 +62,11 @@ def inject_mount(network: 'DirectDriveNetwork', host_id: int):
 
 
 # TODO pjordan: We got some optimization potential here
-def resolve_to_slices(slice_map: SliceMap, data_start: int, data_end: int) -> List[SliceId]:
+def resolve_to_slices_and_sizes(slice_map: SliceMap, data_start: int, data_end: int) -> List[Tuple[SliceId, int]]:
     return [
-        sid for (sid, (start, end)) in enumerate(slice_map)
+        (sid, min(end, data_end) - min(start, data_start))
+        for (sid, (start, end)) in enumerate(slice_map)
         if not (end < data_start or data_end < start)
-    ]
-
-
-def resolve_slice_sizes(slice_map: SliceMap, data_start: int, data_end: int) -> List[int]:
-    return [
-        min(end, data_end) - min(start, data_start)
-        if not (end < data_start or data_end < start)
-        else 0
-        for (start, end) in slice_map
     ]
 
 
@@ -82,8 +74,8 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
     get_new_tag = network.get_next_tag
     get_builder = network.get_builder
 
-    slice_ids = resolve_to_slices(network.slice_map, start, start+length)
-    slice_sizes = resolve_slice_sizes(network.slice_map, start, start+length)
+    slice_ids = resolve_to_slices_and_sizes(
+        network.slice_map, start, start+length)
 
     host_rank = network.topology.get_host(host_id)
     host_builder = get_builder(host_rank)
@@ -92,15 +84,15 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             get_builder(network.topology.get_bss(bss_id))
             for bss_id in network.bss_resp[network.slice_resp[id]]
         ]
-        for id in slice_ids
+        for (id, _) in slice_ids
     }
     ccs_builders = {
         id: get_builder(network.topology.get_ccs(network.slice_resp[id]))
-        for id in slice_ids
+        for (id, _) in slice_ids
     }
 
     # Part A: Request all SqNs (Assumption)
-    for id in slice_ids:
+    for (id, _) in slice_ids:
         ccs_builder = ccs_builders.get(id)
         assert ccs_builder, f"CCS builder for slice {id} missing"
         ccs_rank = ccs_builder.rank_id
@@ -127,7 +119,7 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
         ccs_builder.require_dependency(lbl_ccs_resp_sqn, lbl_ccs_req_sqn)
 
     # Part B: Read all slice data
-    for id in slice_ids:
+    for (id, size) in slice_ids:
         resp_bss_builders = bss_builders.get(id)
         assert resp_bss_builders, f"BSS builders for slice {id} missing"
         bss_builder = resp_bss_builders[network.get_next_bss(
@@ -145,7 +137,6 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
         bss_builder.add_calc(LOOKUP_TIME)
 
         # Step 3: BSS -> Host(VDC): Send slice data
-        size = slice_sizes[id]
         lbl_bss_resp_slice = bss_builder.add_send(
             size, host_rank, recv_tag)
         lbl_host_resp_slice = host_builder.add_recv(
@@ -162,8 +153,7 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
     get_new_tag = network.get_next_tag
     get_builder = network.get_builder
 
-    slice_ids = resolve_to_slices(network.slice_map, start, start + length)
-    slice_sizes = resolve_slice_sizes(network.slice_map, start, start + length)
+    slice_ids = resolve_to_slices_and_sizes(network.slice_map, start, start + length)
 
     host_rank = network.topology.get_host(host_id)
     host_builder = get_builder(host_rank)
@@ -172,20 +162,19 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
             get_builder(network.topology.get_bss(bss_id))
             for bss_id in network.bss_resp[network.slice_resp[id]]
         ]
-        for id in slice_ids
+        for (id, _) in slice_ids
     }
     ccs_builders = {
         id: get_builder(network.topology.get_ccs(network.slice_resp[id]))
-        for id in slice_ids
+        for (id, _) in slice_ids
     }
 
-    for id in slice_ids:
+    for (id, size) in slice_ids:
         ccs_builder = ccs_builders.get(id)
         assert ccs_builder, f"CCS builder for slice {id} missing"
         ccs_rank = ccs_builder.rank_id
 
         data_tag = get_new_tag()
-        size = slice_sizes[id]
         # Step 1: Host(VDC) -> CCS: Send data
         lbl_host_req_sqn = host_builder.add_send(
             size, ccs_rank, data_tag)
