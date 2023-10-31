@@ -9,8 +9,8 @@ def parse_trace(trace_path: str, out_path: str):
     # Extract Information about Topology and Disks
     logger.info("Extracting general trace information")
 
-    slice_size = 1024
-    disk_size = 1024*1024
+    slice_size = 1024*1024
+    disk_size = 1024*1024*1024
     host_count = 1
     slb_count = 1
     gs_count = 1
@@ -25,9 +25,6 @@ def parse_trace(trace_path: str, out_path: str):
             host_count = max(host_count, int(asu) + 1)
             disk_size = max(int(lba) + int(size), disk_size)
             csv_line_no += 1
-
-    # TODO pjordan: Better value required, just make sure to cap this
-    slice_size = disk_size / 1024
 
     # Create Network Topology
     topology = NetworkTopology(
