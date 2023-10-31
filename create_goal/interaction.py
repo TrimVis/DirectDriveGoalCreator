@@ -66,7 +66,7 @@ def resolve_to_slices_and_sizes(slice_map: SliceMap, data_start: int, data_end: 
     return [
         (sid, min(end, data_end) - min(start, data_start))
         for (sid, (start, end)) in enumerate(slice_map)
-        if not (end < data_start or data_end < start)
+        if end >= data_start and data_end >= start
     ]
 
 
