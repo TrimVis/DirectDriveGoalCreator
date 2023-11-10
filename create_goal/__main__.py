@@ -25,21 +25,21 @@ def cli(debug):
     pass
 
 
-@cli.command(name="trace", help="Transform a uMass trace file to a goal file")
+@cli.command(name="trace", help="Transform a uMass trace file to a goal file. The no of hosts and minimum disk size will be autodected and adapted if necessary")
 @click.argument('trace_path', type=click.Path(exists=True, dir_okay=False, resolve_path=True))
 @click.argument('out_path', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
-def cli_pt(trace_path, out_path):
-    # Extract Information about Topology and Disks
-    logger.info("Extracting general trace information")
+@click.option('--slice-size', default=1024, help='Slice size in kB')
+@click.option('--slb-count', default=1, help='No of Software Load Balancers in network')
+@click.option('--gs-count', default=1, help='No of Gateway Switches in network')
+@click.option('--mds-count', default=1, help='No of MetaData Services in network')
+@click.option('--ccs-count', default=8, help='No of Change Coordinator Services in network')
+@click.option('--bss-count', default=64, help='No of Block Storage Services in network')
+def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count):
+    logger.info("Extracting host count and disk size from trace")
 
-    slice_size = 1024*1024
     disk_size = 1024*1024*1024
+    slice_size *= 1024
     host_count = 1
-    slb_count = 1
-    gs_count = 1
-    mds_count = 1
-    ccs_count = 1
-    bss_count = 1
 
     csv_line_no = 0
     with open(trace_path, 'r') as f:
