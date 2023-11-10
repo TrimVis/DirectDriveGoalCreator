@@ -22,7 +22,6 @@ def cli(debug):
         logger.remove()  # remove the old handler. Else, the old one will work along with the new one you've added below'
         logger.add(sys.stdout, format=my_format,
                    filter="__main__", level="INFO")
-    pass
 
 
 @cli.command(name="trace", help="Transform a uMass trace file to a goal file. The no of hosts and minimum disk size will be autodected and adapted if necessary")
