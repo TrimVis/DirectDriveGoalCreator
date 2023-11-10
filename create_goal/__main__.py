@@ -33,13 +33,13 @@ def cli(debug):
 @click.option('--mds-count', default=1, help='No of MetaData Services in network')
 @click.option('--ccs-count', default=8, help='No of Change Coordinator Services in network')
 @click.option('--bss-count', default=64, help='No of Block Storage Services in network')
-def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count):
-    logger.info("Extracting host count and disk size from trace")
-
+@click.option('--next-slb-strategy', default='round-robin', help="Strategy to decide on next SLB")
+def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy):
     disk_size = 1024*1024*1024
     slice_size *= 1024
     host_count = 1
 
+    logger.info("Extracting host count and disk size from trace")
     csv_line_no = 0
     with open(trace_path, 'r') as f:
         reader = csv.reader(f)
@@ -64,7 +64,9 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
     logger.info(
         f"Creating network (Slice Size: {slice_size//1024}kB; Disk Size: {disk_size//1024}kB)")
     network = DirectDriveNetwork(
-        topology=topology, slice_size=slice_size, disk_size=disk_size)
+        topology=topology, slice_size=slice_size, disk_size=disk_size,
+        next_slb_strategy=next_slb_strategy,
+    )
 
     # Add Interactions
     logger.info("Adding interactions")

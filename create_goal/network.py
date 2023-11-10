@@ -1,4 +1,5 @@
 import math
+import random
 from dataclasses import dataclass
 from loguru import logger
 from tqdm import tqdm
@@ -66,6 +67,9 @@ class NetworkTopology:
             self.ccs_count + self.bss_count
 
 
+VALID_NEXT_STRATEGIES = ['round-robin', 'random', 'first']
+
+
 class DirectDriveNetwork:
     topology: NetworkTopology
     slice_map: SliceMap
@@ -74,14 +78,22 @@ class DirectDriveNetwork:
 
     next_counter: Dict[str, int] = {}
 
-    ccs_strategy: str = "round-robin"
-    bss_strategy: str = "round-robin"
-    mds_strategy: str = "first"
+    next_ccs_strategy: str = "round-robin"
+    next_bss_strategy: str = "round-robin"
+    next_gs_strategy: str = "first"
+    next_slb_strategy: str = "first"
+    next_mds_strategy: str = "first"
 
     builders: List[RankBuilder]
 
     def __init__(self, topology: NetworkTopology,
-                 disk_size: int, slice_size: int):
+                 disk_size: int, slice_size: int,
+                 next_ccs_strategy: Optional[str] = None,
+                 next_bss_strategy: Optional[str] = None,
+                 next_gs_strategy: Optional[str] = None,
+                 next_slb_strategy: Optional[str] = None,
+                 next_mds_strategy: Optional[str] = None,
+                 ):
         logger.info("Creating DirectDriveNetwork with:")
         logger.info("disk sizes: {}; slice_size: {}", disk_size, slice_size)
         assert topology.is_valid(), "Network topology invalid: All entries should be >= 1"
@@ -131,6 +143,23 @@ class DirectDriveNetwork:
         for i in range(self.topology.bss_count):
             self.builders[self.topology.get_bss(i)].add_comment(f'BSS #{i}')
 
+        # Checking strategies
+        if next_gs_strategy:
+            assert next_gs_strategy in VALID_NEXT_STRATEGIES, "Next GS strategy is not supported"
+            self.next_gs_strategy = next_gs_strategy
+        if next_mds_strategy:
+            assert next_mds_strategy in VALID_NEXT_STRATEGIES, "Next MDS strategy is not supported"
+            self.next_mds_strategy = next_mds_strategy
+        if next_ccs_strategy:
+            assert next_ccs_strategy in VALID_NEXT_STRATEGIES, "Next CCS strategy is not supported"
+            self.next_ccs_strategy = next_ccs_strategy
+        if next_bss_strategy:
+            assert next_bss_strategy in VALID_NEXT_STRATEGIES, "Next BSS strategy is not supported"
+            self.next_bss_strategy = next_bss_strategy
+        if next_slb_strategy:
+            assert next_slb_strategy in VALID_NEXT_STRATEGIES, "Next SLB strategy is not supported"
+            self.next_slb_strategy = next_slb_strategy
+
         logger.success("Finished DirectDriveNetwork initialization")
 
     def add_interaction(self, *, op_code: str, asu: int,
@@ -175,6 +204,15 @@ class DirectDriveNetwork:
 
         return next
 
+    def _get_next_strategy_counter(self, lbl: str, strategy: str, *, modulo: int):
+        if strategy == 'round-robin':
+            return self._get_next_counter(lbl, modulo=modulo)
+        elif strategy == 'random':
+            return random.randint(0, modulo)
+        elif strategy == 'first':
+            return 0
+        raise RuntimeError('Invalid strategy')
+
     def get_next_label(self, prefix: Optional[str] = 'l') -> str:
         return f"{prefix}{self._get_next_counter('label')}"
 
@@ -182,16 +220,20 @@ class DirectDriveNetwork:
         return self._get_next_counter('tag')
 
     def get_next_bss(self, slice_id: Optional[int]) -> int:
-        return self._get_next_counter(f'bss{slice_id}' if slice_id else 'bss', modulo=self.topology.bss_count)
+        return self._get_next_strategy_counter(
+            f'bss{slice_id}' if slice_id else 'bss',
+            self.next_bss_strategy,
+            modulo=self.topology.bss_count
+        )
 
     def get_next_ccs(self) -> int:
-        return self._get_next_counter('ccs', modulo=self.topology.ccs_count)
+        return self._get_next_strategy_counter('ccs', self.next_ccs_strategy, modulo=self.topology.ccs_count)
 
     def get_next_mds(self) -> int:
-        return self._get_next_counter('mds', modulo=self.topology.mds_count)
+        return self._get_next_strategy_counter('mds', self.next_mds_strategy, modulo=self.topology.mds_count)
 
     def get_next_gs(self) -> int:
-        return self._get_next_counter('gs', modulo=self.topology.gs_count)
+        return self._get_next_strategy_counter('gs', self.next_gs_strategy, modulo=self.topology.gs_count)
 
     def get_next_slb(self) -> int:
-        return self._get_next_counter('slb', modulo=self.topology.slb_count)
+        return self._get_next_strategy_counter('slb', self.next_slb_strategy, modulo=self.topology.slb_count)
