@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from common import Addr, SliceId, SliceMap
+from .common import Addr, SliceId, SliceMap
 
 # Request Config
 LOOKUP_REQ_SIZE: int = 256

@@ -2,11 +2,11 @@ import math
 from dataclasses import dataclass
 from loguru import logger
 from tqdm import tqdm
-
-from rank import RankBuilder
-from interaction import inject_mount, inject_read, inject_write
 from typing import List, Optional, Dict
-from common import Addr, Id, SliceMap, SliceResponsibility, BssResponsibility
+
+from .rank import RankBuilder
+from .interaction import inject_mount, inject_read, inject_write
+from .common import Addr, Id, SliceMap, SliceResponsibility, BssResponsibility
 
 
 @dataclass(frozen=True, kw_only=True)
