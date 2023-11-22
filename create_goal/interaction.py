@@ -1,4 +1,5 @@
-from typing import List, Tuple
+from typing import List, Tuple, Literal
+from math import ceil
 
 from .common import Addr, SliceId, SliceMap
 
@@ -7,8 +8,21 @@ LOOKUP_REQ_SIZE: int = 256
 LOOKUP_RESP_SIZE: int = 1024
 MOUNT_REQ_SIZE: int = 1024
 MOUNT_RESP_SIZE: int = 1024*1024
-STORE_TIME: int = 1024
-LOOKUP_TIME: int = 256
+
+
+# Interaction time
+def calc_io_time(data_size: int, kind: Literal['read'] | Literal['write']):
+    # NOTE: estimate for sequential read and write of average ssd taken from
+    # https://www.tomshardware.com/features/ssd-benchmarks-hierarchy
+    # TODO pjordan: Find a more reputable value for this
+
+    if kind == 'read':
+        # 6000 MB/s => 1e6/(6000 * 1e6) ms/B = 1/6000 ms/B
+        per_byte_cost = 1/6000
+    else:
+        # 1500 MB/s
+        per_byte_cost = 1/1500
+    return ceil(data_size * per_byte_cost)
 
 
 # Interactions
@@ -39,7 +53,7 @@ def inject_mount(network: 'DirectDriveNetwork', host_id: int):
     lbl_mds_req = mds_builder.add_recv(MOUNT_REQ_SIZE, gs_rank, req_tag)
 
     # Step 2: Lookup map of slices
-    lbl_mds_load = mds_builder.add_calc(LOOKUP_TIME)
+    lbl_mds_load = mds_builder.add_calc(calc_io_time(MOUNT_RESP_SIZE, 'read'))
 
     # Step 3: Reply with map of slices
     #   MDS -> SLB -> GS -> Host
@@ -116,7 +130,7 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             LOOKUP_REQ_SIZE, host_rank, sqn_tag)
 
         # Step 2: Lookup Sqn
-        ccs_builder.add_calc(LOOKUP_TIME)
+        ccs_builder.add_calc(calc_io_time(LOOKUP_RESP_SIZE, 'read'))
 
         # Step 3: CCS -> Host(VDC): Send Sqn
         lbl_ccs_resp_sqn = ccs_builder.add_send(
@@ -145,7 +159,7 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             LOOKUP_REQ_SIZE, host_rank, recv_tag)
 
         # Step 2: Lookup Slice data
-        bss_builder.add_calc(LOOKUP_TIME)
+        bss_builder.add_calc(calc_io_time(size, 'read'))
 
         # Step 3: BSS -> Host(VDC): Send slice data
         lbl_bss_resp_slice = bss_builder.add_send(
@@ -194,7 +208,7 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
             size, host_rank, data_tag)
 
         # Step 2: Store data on CCS
-        lbl_ccs_store = ccs_builder.add_calc(STORE_TIME)
+        lbl_ccs_store = ccs_builder.add_calc(calc_io_time(size, 'write'))
         ccs_builder.require_dependency(lbl_ccs_store, lbl_ccs_req_sqn)
 
         # Step 3: CCS -> all(BSS): Replicate data
@@ -212,7 +226,7 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
                 size, ccs_rank, repl_tag)
 
             # Step 3b: BSS writes data
-            lbl_bss_store = bss_builder.add_calc(STORE_TIME)
+            lbl_bss_store = bss_builder.add_calc(calc_io_time(size, 'write'))
 
             sqn_tag = get_new_tag()
             # Step 3c: BSS responds with SqN to CCS
