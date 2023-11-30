@@ -1,7 +1,7 @@
 import click
 from tqdm import tqdm
 
-from perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
+from .perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
 
 
 @click.command(

@@ -1,6 +1,6 @@
 from random import randint
 
-from perfetto_trace_pb2 import (
+from .perfetto_trace_pb2 import (
     Trace,
     TracePacket,
     TrackDescriptor,

@@ -82,7 +82,9 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
 
 
 @cli.command(name="simple", help="Creates a goal file of a simple network and adds for each host random read and writes")
-@click.option('-N', default=16, help='No. of random read and writes per host in network')
+@click.option('--writes', default=16, help='No. of random writes per host in network')
+@click.option('--reads', default=16, help='No. of random read per host in network')
+@click.option('--mount/--no-mount', default=True, help='Also simulate mount operation for each host')
 @click.option('--disk-size', default=4096, help='Disk size in kB')
 @click.option('--slice-size', default=1, help='Slice size in kB')
 @click.option('--host-count', default=16, help='No. of hosts in network')
@@ -92,7 +94,7 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
 @click.option('--ccs-count', default=128, help='No of Change Coordinator Services in network')
 @click.option('--bss-count', default=1280, help='No of Block Storage Services in network')
 @click.argument('out_file', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
-def cli_cs(out_file, n, host_count, disk_size, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count):
+def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count):
     """ Creates a simple network and random reads and writes in it """
     disk_size *= 1024
     slice_size *= 1024
@@ -108,27 +110,31 @@ def cli_cs(out_file, n, host_count, disk_size, slice_size, slb_count, gs_count, 
     network = DirectDriveNetwork(
         topology=topology, slice_size=slice_size, disk_size=disk_size)
 
-    logger.info("Adding Mount Interactions")
-    pbar = tqdm(total=(n*host_count*2+host_count))
-    for h in range(host_count):
-        network.add_mount(h)
-    pbar.update(host_count)
-
-    logger.info("Adding Read Interactions")
-    for h in range(host_count):
-        for _ in range(n):
-            start = random.randint(0, disk_size//2)
-            end = random.randint(start, disk_size)
-            network.add_read(h, start, end)
+    pbar = tqdm(total=(reads*host_count + writes *
+                host_count + (host_count if mount else 0)))
+    if mount:
+        logger.info("Adding Mount Interactions")
+        for h in range(host_count):
+            network.add_mount(h)
         pbar.update(host_count)
 
-    logger.info("Adding Write Interactions")
-    for h in range(host_count):
-        for _ in range(n):
-            start = random.randint(0, disk_size//2)
-            end = random.randint(start, disk_size)
-            network.add_write(h, start, end)
-        pbar.update(host_count)
+    if reads:
+        logger.info("Adding Read Interactions")
+        for h in range(host_count):
+            for _ in range(reads):
+                start = random.randint(0, disk_size//2)
+                end = random.randint(start, disk_size)
+                network.add_read(h, start, end)
+            pbar.update(host_count)
+
+    if writes:
+        logger.info("Adding Write Interactions")
+        for h in range(host_count):
+            for _ in range(writes):
+                start = random.randint(0, disk_size//2)
+                end = random.randint(start, disk_size)
+                network.add_write(h, start, end)
+            pbar.update(host_count)
 
     logger.info(f"Writing goal file to '{out_file}'")
     network.to_goal(out_file)

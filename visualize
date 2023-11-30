@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+MODULE_PARENT=$(realpath ./visualize_loggopssim)
+PYTHONPATH="$PYTHONPATH:$MODULE_PARENT" python -m visualize ${@:1}
