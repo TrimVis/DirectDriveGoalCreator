@@ -34,7 +34,8 @@ def cli(debug):
 @click.option('--ccs-count', default=8, help='No of Change Coordinator Services in network')
 @click.option('--bss-count', default=64, help='No of Block Storage Services in network')
 @click.option('--next-slb-strategy', default='round-robin', help="Strategy to decide on next SLB")
-def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy):
+@click.option('--rank-names-dest', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
+def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy, rank_names_dest):
     disk_size = 1024*1024*1024
     slice_size *= 1024
     host_count = 1
@@ -59,6 +60,8 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
         ccs_count=ccs_count,
         bss_count=bss_count,
     )
+    if rank_names_dest:
+        topology.to_file(rank_names_dest)
 
     # Create Network
     logger.info(
@@ -93,8 +96,9 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
 @click.option('--mds-count', default=1, help='No of MetaData Services in network')
 @click.option('--ccs-count', default=128, help='No of Change Coordinator Services in network')
 @click.option('--bss-count', default=1280, help='No of Block Storage Services in network')
+@click.option('--rank-names-dest', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
 @click.argument('out_file', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
-def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count):
+def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, rank_names_dest):
     """ Creates a simple network and random reads and writes in it """
     disk_size *= 1024
     slice_size *= 1024
@@ -107,6 +111,9 @@ def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, sl
         ccs_count=ccs_count,
         bss_count=bss_count,
     )
+    if rank_names_dest:
+        topology.to_file(rank_names_dest)
+
     network = DirectDriveNetwork(
         topology=topology, slice_size=slice_size, disk_size=disk_size)
 

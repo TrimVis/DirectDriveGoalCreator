@@ -1,4 +1,5 @@
 import click
+import json
 from tqdm import tqdm
 
 from .perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
@@ -14,7 +15,17 @@ from .perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
 @click.argument(
     "out_file", type=click.Path(exists=False, dir_okay=False, resolve_path=True)
 )
-def cli(in_file, out_file):
+@click.option(
+    "--rank-name-map",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Json file which maps rank ids to a descriptive name",
+)
+def cli(in_file, out_file, rank_name_map):
+    rank_mappings = {}
+    if rank_name_map:
+        with open(rank_name_map, "r") as f:
+            rank_mappings = json.loads(f.read())
+
     with open(in_file, "r") as f:
         # extrace the num of ranks and total no of lines
         lines = f.readlines()
@@ -24,7 +35,13 @@ def cli(in_file, out_file):
         # Create an overarching process
         process = TProcess(0, "Network Execution")
         # create a thread for each rank
-        threads = [TThread(i + 1, f"Rank {i}") for i in range(numranks)]
+        threads = [
+            TThread(i + 1, rank_mappings.get(f"{i}", f"Rank {i}"))
+            for i in range(numranks)
+        ]
+
+        # transmission queue
+        transmissions = []
 
         # parse the remaining lines
         pbar = tqdm(total=(no_lines - 1))
@@ -40,85 +57,96 @@ def cli(in_file, out_file):
                 start = int(args[2])
                 end = int(args[3])
                 size = int(args[4])
-
                 flow_id = get_unique_uuid()
 
-                send_candidates = [
-                    (i, t)
-                    for (i, t) in enumerate(threads[src].event_params)
-                    if t[5] == "osend" and t[2] <= start
-                ]
-                # Add flow_id to send event
-                if send_candidates:
-                    (send_id, send_t) = max(
-                        send_candidates,
-                        key=lambda t: t[1][2],
-                    )
-                    threads[src].event_params[send_id] = (
-                        send_t[0],
-                        send_t[1],
-                        send_t[2],
-                        send_t[3],
-                        [flow_id],
-                        send_t[5],
-                    )
-                else:
-                    threads[src].add_event(
-                        "transmission start",
-                        estart=start,
-                        eend=start + 1,
-                        flow_ids=[flow_id],
-                    )
+                transmissions += [(src, dst, start, end, size, flow_id)]
 
-                recv_candidates = [
-                    (i, t)
-                    for (i, t) in enumerate(threads[dst].event_params)
-                    if t[5] == "orecv" and t[1] <= end
-                ]
-                # Add flow_id to recv event
-                if recv_candidates:
-                    recv_candidate = max(
-                        recv_candidates,
-                        key=lambda t: t[1][2],
-                    )
-                    (recv_id, recv_t) = recv_candidate
-                    threads[dst].event_params[recv_id] = (
-                        recv_t[0],
-                        recv_t[1],
-                        recv_t[2],
-                        recv_t[3],
-                        [flow_id],
-                        recv_t[5],
-                    )
-                else:
-                    threads[dst].add_event(
-                        "transmission end",
-                        estart=end,
-                        eend=end + 1,
-                        flow_ids=[flow_id],
-                    )
             else:
                 # Extract args
                 rank = int(args[0])
                 cpu = int(args[1])
                 start = int(args[2])
                 end = int(args[3])
+                debug_vars = [
+                    ("rank", str(rank)),
+                    ("cpu", str(cpu)),
+                ]
 
                 thread = threads[rank]
 
                 # Add interaction
                 if op == "osend":
-                    thread.add_event("Send", estart=start, eend=end, op=op)
+                    thread.add_event(
+                        "Send", estart=start, eend=end, op=op, debug=debug_vars
+                    )
                 elif op == "orecv":
-                    thread.add_event("Receive", estart=start, eend=end, op=op)
+                    thread.add_event(
+                        "Receive", estart=start, eend=end, op=op, debug=debug_vars
+                    )
                 elif op == "loclop":
-                    thread.add_event("Computing", estart=start, eend=end, op=op)
+                    thread.add_event(
+                        "Computing", estart=start, eend=end, op=op, debug=debug_vars
+                    )
                 elif op == "noise":
-                    # TODO pjordan: Remove this?
-                    # thread.add_event("Noise", estart=start, eend=end, op=op)
-                    pass
+                    thread.add_event(
+                        "Noise", estart=start, eend=end, op=op, debug=debug_vars
+                    )
 
             pbar.update(1)
+
+        # Add all transmission messages, now that all other events have been parsed
+        for src, dst, start, end, size, flow_id in transmissions:
+            threads[src].add_event(
+                "Transmission Start",
+                estart=start,
+                eend=start + (end - start) // 10,
+                flow_ids=[flow_id],
+                debug=[("size", str(size))],
+            )
+            if send_candidates := [
+                (i, t)
+                for (i, t) in enumerate(threads[src].event_params)
+                if t[5] == "osend" and t[1] <= start
+            ]:
+                (send_id, send_t) = max(
+                    send_candidates,
+                    key=lambda t: t[1][1],
+                )
+                threads[src].event_params[send_id] = (
+                    send_t[0],
+                    send_t[1],
+                    send_t[2],
+                    send_t[3],
+                    [flow_id, *send_t[4]] if send_t[4] else [flow_id],
+                    send_t[5],
+                    send_t[6],
+                )
+
+            threads[dst].add_event(
+                "Transmission End",
+                estart=end - (end - start) // 10,
+                eend=end,
+                flow_ids=[flow_id],
+                debug=[("size", str(size))],
+            )
+            if recv_candidates := [
+                (i, t)
+                for (i, t) in enumerate(threads[dst].event_params)
+                if t[5] == "orecv" and end <= t[2]
+            ]:
+                (recv_id, recv_t) = min(
+                    recv_candidates,
+                    key=lambda t: t[1][1],
+                )
+                threads[dst].event_params[recv_id] = (
+                    recv_t[0],
+                    recv_t[1],
+                    recv_t[2],
+                    recv_t[3],
+                    [flow_id, *recv_t[4]] if recv_t[4] else [flow_id],
+                    recv_t[5],
+                    recv_t[6],
+                )
 
         # Add all our threads to our process
         for i, t in enumerate(threads):

@@ -1,3 +1,4 @@
+import json
 import math
 import random
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ class NetworkTopology:
     bss_count: Id = 1
 
     def __post_init__(self):
+        # Update the total number of ranks
         logger.info("Created network topology:")
         logger.info("hosts: {}; slbs: {}; gs: {}; mds: {}; ccs: {}; bss: {}",
                     self.host_count, self.slb_count, self.gs_count, self.mds_count, self.ccs_count, self.bss_count)
@@ -65,6 +67,26 @@ class NetworkTopology:
         return self.host_count + self.slb_count +\
             self.gs_count + self.mds_count +\
             self.ccs_count + self.bss_count
+
+    def to_file(self, dest):
+        value = {}
+
+        for i in range(self.host_count):
+            value[str(self.get_host(i))] = f"Host {i}"
+        for i in range(self.slb_count):
+            value[str(self.get_slb(i))] = f"SLB {i}"
+        for i in range(self.gs_count):
+            value[str(self.get_gs(i))] = f"GS {i}"
+        for i in range(self.mds_count):
+            value[str(self.get_mds(i))] = f"MDS {i}"
+        for i in range(self.ccs_count):
+            value[str(self.get_ccs(i))] = f"CCS {i}"
+        for i in range(self.bss_count):
+            value[str(self.get_bss(i))] = f"BSS {i}"
+
+        json_value = json.dumps(value)
+        with open(dest, "w+") as f:
+            f.writelines(json_value)
 
 
 VALID_NEXT_STRATEGIES = ['round-robin', 'random', 'first']

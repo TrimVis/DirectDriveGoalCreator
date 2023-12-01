@@ -7,6 +7,7 @@ from .perfetto_trace_pb2 import (
     ThreadDescriptor,
     ProcessDescriptor,
     TrackEvent,
+    DebugAnnotation,
 )
 
 MAX_UUID = 2**64 - 1
@@ -33,7 +34,7 @@ class TThread:
         self.uuid = get_unique_uuid()
 
     def add_event(
-        self, ename, estart=None, eend=None, etime=None, flow_ids=None, op=None
+        self, ename, estart=None, eend=None, etime=None, flow_ids=None, op=None, debug=None
     ):
         assert ename is not None, "Provide an event name"
         assert (
@@ -44,9 +45,9 @@ class TThread:
         ), "The event has to be instant or a slice, not both"
 
         # This is used as an intermediary, so we can after the fact inject flows
-        self.event_params += [(ename, estart, eend, etime, flow_ids, op)]
+        self.event_params += [(ename, estart, eend, etime, flow_ids, op, debug)]
 
-    def inject_event(self, packet_list, ename, estart, eend, etime, flow_ids):
+    def inject_event(self, packet_list, ename, estart, eend, etime, flow_ids, debug):
         if estart is not None:
             packet_list += [
                 TracePacket(
@@ -56,6 +57,7 @@ class TThread:
                         track_uuid=self.uuid,
                         flow_ids=flow_ids,
                         name=ename,
+                        debug_annotations=[DebugAnnotation(name=k, string_value=v) for (k, v) in debug] if debug else None,
                     ),
                     trusted_packet_sequence_id=TRUSTED_PACKET_SEQ_ID,
                 )
@@ -80,6 +82,7 @@ class TThread:
                         type=TrackEvent.Type.TYPE_INSTANT,
                         track_uuid=self.uuid,
                         name=ename,
+                        debug_annotations=[DebugAnnotation(name=k, string_value=v) for (k, v) in debug] if debug else None,
                     ),
                     trusted_packet_sequence_id=TRUSTED_PACKET_SEQ_ID,
                 )
@@ -102,8 +105,8 @@ class TThread:
         packet_list += [thread_init_packet]
 
         # Inject all events
-        for ename, estart, eend, etime, flow_ids, _ in self.event_params:
-            self.inject_event(packet_list, ename, estart, eend, etime, flow_ids)
+        for ename, estart, eend, etime, flow_ids, _, debug in self.event_params:
+            self.inject_event(packet_list, ename, estart, eend, etime, flow_ids, debug)
 
 
 class TProcess:
