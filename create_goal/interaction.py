@@ -7,7 +7,7 @@ from .common import Addr, SliceId, SliceMap
 LOOKUP_REQ_SIZE: int = 256
 LOOKUP_RESP_SIZE: int = 1024
 MOUNT_REQ_SIZE: int = 1024
-MOUNT_RESP_SIZE: int = 1024*1024
+MOUNT_RESP_SIZE: int = 1024
 
 
 # Interaction time
