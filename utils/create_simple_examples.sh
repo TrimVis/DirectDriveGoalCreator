@@ -2,6 +2,10 @@
 
 DEST_DIR="$1"
 
+# mount only
+python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 0 --mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-0_mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-0_mount.goal"
+python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 0 --reads 0 --mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-0_reads-0_mount_topology.json" "$DEST_DIR/host-2_writes-0_reads-0_mount.goal"
+
 # 1 host, 1 IO operations
 python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 1 --reads 1 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-1_reads-1_wo-mount_topology.json" "$DEST_DIR/host-1_writes-1_reads-1_wo-mount.goal"
 python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 1 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-1_wo-mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-1_wo-mount.goal"
