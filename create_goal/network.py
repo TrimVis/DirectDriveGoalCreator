@@ -45,24 +45,25 @@ class NetworkTopology:
 
     def _init_fattree_state(self):
         self.mapping = {}
-        evasions = ['l'] * self.get_total_ranks()
         # Spread all components evenly across the network
         no_total_ranks = self.get_total_ranks()
 
         def spread_across_network(kind, count):
-            fac = no_total_ranks / count
+            fac = no_total_ranks / (count + 1)
             for i in range(count):
                 key = f'{kind}{i}'
-                pos = round(i * fac)
+                pos = round((i + 1) * fac)
                 if pos in self.mapping.values():
-                    while pos in self.mapping.values():
-                        evasions[pos] = 'l' if evasions[pos] == 'r' else 'r'
-                        pos += 1 if evasions[pos] == 'r' else -1
-                        if pos < 0:
-                            pos = no_total_ranks - 1
-                        elif pos >= no_total_ranks:
-                            pos = 0
-                    self.mapping[key] = pos
+                    pos_l = (pos - 1) % no_total_ranks
+                    pos_r = (pos + 1) % no_total_ranks
+                    while pos_l in self.mapping.values() and pos_r in self.mapping.values():
+                        pos_l = (pos_l - 1) % no_total_ranks
+                        pos_r = (pos_r + 1) % no_total_ranks
+
+                    if pos_l not in self.mapping.values():
+                        self.mapping[key] = pos_l
+                    else:
+                        self.mapping[key] = pos_r
                 else:
                     self.mapping[key] = pos
 

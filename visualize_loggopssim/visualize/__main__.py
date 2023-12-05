@@ -106,7 +106,7 @@ def cli(in_file, out_file, rank_name_map):
             if send_candidates := [
                 (i, t)
                 for (i, t) in enumerate(threads[src].event_params)
-                if t[5] == "osend" and t[2] <= start
+                if t[5] == "osend" and t[1] <= start and t[2] <= end
             ]:
                 (send_id, send_t) = max(
                     send_candidates,
