@@ -132,7 +132,7 @@ def cli(in_file, out_file, rank_name_map):
             if recv_candidates := [
                 (i, t)
                 for (i, t) in enumerate(threads[dst].event_params)
-                if t[5] == "orecv" and end <= t[1]
+                if t[5] == "orecv" and start <= t[1] and end <= t[2]
             ]:
                 (recv_id, recv_t) = min(
                     recv_candidates,
