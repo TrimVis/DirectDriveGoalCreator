@@ -1,17 +1,18 @@
 import json
 import math
 import random
-from dataclasses import dataclass
 from loguru import logger
 from tqdm import tqdm
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
 
 from .rank import RankBuilder
 from .interaction import inject_mount, inject_read, inject_write
 from .common import Addr, Id, SliceMap, SliceResponsibility, BssResponsibility
 
+VALID_TOPOLOGY_STRATEGIES = ['grouped-by-kind', 'fat-tree']
+TopologyStrategy = Literal['grouped-by-kind', 'fat-tree']
 
-@dataclass(frozen=True, kw_only=True)
+
 class NetworkTopology:
     host_count: Id = 1
     slb_count: Id = 1
@@ -19,8 +20,82 @@ class NetworkTopology:
     mds_count: Id = 1
     ccs_count: Id = 1
     bss_count: Id = 1
+    strategy: TopologyStrategy = 'grouped-by-kind'
+    mapping: Dict = {}
 
-    def __post_init__(self):
+    def _init_grouped_by_kind_state(self):
+        self.mapping = {}
+
+        def spread_across_network(kind, count, offset):
+            for i in range(count):
+                key = f'{kind}{i}'
+                pos = offset + i
+                self.mapping[key] = pos
+
+        spread_across_network('host', self.host_count, 0)
+        spread_across_network('slb', self.slb_count, self.host_count)
+        spread_across_network('gs', self.gs_count,
+                              self.host_count + self.slb_count)
+        spread_across_network('mds', self.mds_count,
+                              self.host_count + self.slb_count + self.gs_count)
+        spread_across_network('ccs', self.ccs_count, self.host_count +
+                              self.slb_count + self.gs_count + self.mds_count)
+        spread_across_network('bss', self.bss_count, self.host_count +
+                              self.slb_count + self.gs_count + self.mds_count + self.ccs_count)
+
+    def _init_fattree_state(self):
+        self.mapping = {}
+        evasions = ['l'] * self.get_total_ranks()
+        # Spread all components evenly across the network
+        no_total_ranks = self.get_total_ranks()
+
+        def spread_across_network(kind, count):
+            fac = no_total_ranks / count
+            for i in range(count):
+                key = f'{kind}{i}'
+                pos = round(i * fac)
+                if pos in self.mapping.values():
+                    while pos in self.mapping.values():
+                        evasions[pos] = 'l' if evasions[pos] == 'r' else 'r'
+                        pos += 1 if evasions[pos] == 'r' else -1
+                        if pos < 0:
+                            pos = no_total_ranks - 1
+                        elif pos >= no_total_ranks:
+                            pos = 0
+                    self.mapping[key] = pos
+                else:
+                    self.mapping[key] = pos
+
+        spread_across_network('host', self.host_count)
+        spread_across_network('slb', self.slb_count)
+        spread_across_network('gs', self.gs_count)
+        spread_across_network('mds', self.mds_count)
+        spread_across_network('ccs', self.ccs_count)
+        spread_across_network('bss', self.bss_count)
+
+    def __init__(self, *, host_count=None, slb_count=None, gs_count=None, mds_count=None, ccs_count=None, bss_count=None, strategy=None):
+        if host_count is not None:
+            self.host_count = host_count
+        if slb_count is not None:
+            self.slb_count = slb_count
+        if gs_count is not None:
+            self.gs_count = gs_count
+        if mds_count is not None:
+            self.mds_count = mds_count
+        if ccs_count is not None:
+            self.ccs_count = ccs_count
+        if bss_count is not None:
+            self.bss_count = bss_count
+        if strategy is not None:
+            self.strategy = strategy
+
+        if self.strategy == 'fat-tree':
+            self._init_fattree_state()
+        elif self.strategy == 'grouped-by-kind':
+            self._init_grouped_by_kind_state()
+        else:
+            assert True, "Your selected strategy is not valid"
+
         # Update the total number of ranks
         logger.info("Created network topology:")
         logger.info("hosts: {}; slbs: {}; gs: {}; mds: {}; ccs: {}; bss: {}",
@@ -28,40 +103,31 @@ class NetworkTopology:
 
     def is_valid(self) -> bool:
         for (name, value) in vars(self).items():
-            if value < 1:
+            if name.endswith('_count') and value < 1:
                 logger.error(f"Topology invalid: {name} >= 1 (is {value}")
                 return False
         return True
 
-    def _get(self, id: int, count: int, offset: int):
-        assert id < count
-        return offset + id
+    def _get(self, id: int, kind: str):
+        return self.mapping.get(f'{kind}{id}')
 
     def get_host(self, id: int):
-        offset = 0
-        return self._get(id, self.host_count, offset)
+        return self._get(id, 'host')
 
     def get_slb(self, id: int):
-        offset = self.host_count
-        return self._get(id, self.slb_count, offset)
+        return self._get(id, 'slb')
 
     def get_gs(self, id: int):
-        offset = self.host_count + self.slb_count
-        return self._get(id, self.gs_count, offset)
+        return self._get(id, 'gs')
 
     def get_mds(self, id: int):
-        offset = self.host_count + self.slb_count + self.gs_count
-        return self._get(id, self.mds_count, offset)
+        return self._get(id, 'mds')
 
     def get_ccs(self, id: int):
-        offset = self.host_count + self.slb_count +\
-            self.gs_count + self.mds_count
-        return self._get(id, self.ccs_count, offset)
+        return self._get(id, 'ccs')
 
     def get_bss(self, id: int):
-        offset = self.host_count + self.slb_count +\
-            self.gs_count + self.mds_count + self.ccs_count
-        return self._get(id, self.bss_count, offset)
+        return self._get(id, 'bss')
 
     def get_total_ranks(self):
         return self.host_count + self.slb_count +\
@@ -90,6 +156,7 @@ class NetworkTopology:
 
 
 VALID_NEXT_STRATEGIES = ['round-robin', 'random', 'first']
+NextStrategy = Literal['round-robin', 'random', 'first']
 
 
 class DirectDriveNetwork:
@@ -100,21 +167,21 @@ class DirectDriveNetwork:
 
     next_counter: Dict[str, int] = {}
 
-    next_ccs_strategy: str = "round-robin"
-    next_bss_strategy: str = "round-robin"
-    next_gs_strategy: str = "first"
-    next_slb_strategy: str = "first"
-    next_mds_strategy: str = "first"
+    next_ccs_strategy: NextStrategy = "round-robin"
+    next_bss_strategy: NextStrategy = "round-robin"
+    next_gs_strategy: NextStrategy = "first"
+    next_slb_strategy: NextStrategy = "first"
+    next_mds_strategy: NextStrategy = "first"
 
     builders: List[RankBuilder]
 
     def __init__(self, topology: NetworkTopology,
                  disk_size: int, slice_size: int,
-                 next_ccs_strategy: Optional[str] = None,
-                 next_bss_strategy: Optional[str] = None,
-                 next_gs_strategy: Optional[str] = None,
-                 next_slb_strategy: Optional[str] = None,
-                 next_mds_strategy: Optional[str] = None,
+                 next_ccs_strategy: Optional[NextStrategy] = None,
+                 next_bss_strategy: Optional[NextStrategy] = None,
+                 next_gs_strategy: Optional[NextStrategy] = None,
+                 next_slb_strategy: Optional[NextStrategy] = None,
+                 next_mds_strategy: Optional[NextStrategy] = None,
                  ):
         logger.info("Creating DirectDriveNetwork with:")
         logger.info("disk sizes: {}; slice_size: {}", disk_size, slice_size)
