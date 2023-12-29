@@ -1,8 +1,6 @@
 import click
-import json
-from tqdm import tqdm
 
-from .perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
+from .trace_builder import TraceBuilder, Kind
 
 
 @click.command(
@@ -20,143 +18,28 @@ from .perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
     type=click.Path(exists=True, dir_okay=False, resolve_path=True),
     help="Json file which maps rank ids to a descriptive name",
 )
-def cli(in_file, out_file, rank_name_map):
-    rank_mappings = {}
-    if rank_name_map:
-        with open(rank_name_map, "r") as f:
-            rank_mappings = json.loads(f.read())
+@click.option(
+    "--expert/--simplified",
+    help="Output will either contain extra detailed information or a simplified view",
+    default=False,
+)
+@click.option(
+    "--advanced/--simplified",
+    help="Output will either contain detailed information or a simplified view",
+    default=False,
+)
+def cli(in_file, out_file, rank_name_map, expert, advanced):
+    kind = Kind.ADVANCED if advanced \
+        else Kind.EXPERT if expert \
+        else Kind.SIMPLE
 
-    with open(in_file, "r") as f:
-        # extrace the num of ranks and total no of lines
-        lines = f.readlines()
-        no_lines = len(lines)
-        numranks = int(lines[0][0:-2].split(" ")[1])
+    # Build trace file from rank_name_map and the viz_in_file
+    builder = TraceBuilder()
+    trace = builder.kind(kind).rank_name_map(
+        rank_name_map).viz_file(in_file).build()
 
-        # Create an overarching process
-        process = TProcess(0, "Network Execution")
-        # create a thread for each rank
-        threads = [
-            TThread(i + 1, rank_mappings.get(f"{i}", f"Rank {i}"))
-            for i in range(numranks)
-        ]
-
-        # transmission queue
-        transmissions = []
-
-        # parse the remaining lines
-        pbar = tqdm(total=(no_lines - 1))
-        for line in lines[1:]:
-            params = line.split(" ")
-            op = params[0]
-            args = params[1:]
-
-            if op == "transmission":
-                # Extract args
-                src = int(args[0])
-                dst = int(args[1])
-                start = int(args[2])
-                end = int(args[3])
-                size = int(args[4])
-                flow_id = get_unique_uuid()
-
-                transmissions += [(src, dst, start, end, size, flow_id)]
-
-            else:
-                # Extract args
-                rank = int(args[0])
-                cpu = int(args[1])
-                start = int(args[2])
-                end = int(args[3])
-                debug_vars = [
-                    ("rank", str(rank)),
-                    ("cpu", str(cpu)),
-                ]
-
-                thread = threads[rank]
-
-                # Add interaction
-                if op == "osend":
-                    thread.add_event(
-                        "Send", estart=start, eend=end, op=op, debug=debug_vars
-                    )
-                elif op == "orecv":
-                    thread.add_event(
-                        "Receive", estart=start, eend=end, op=op, debug=debug_vars
-                    )
-                elif op == "loclop":
-                    thread.add_event(
-                        "Computing", estart=start, eend=end, op=op, debug=debug_vars
-                    )
-                elif op == "noise":
-                    thread.add_event(
-                        "Noise", estart=start, eend=end, op=op, debug=debug_vars
-                    )
-
-            pbar.update(1)
-
-        # Add all transmission messages, now that all other events have been parsed
-        for src, dst, start, end, size, flow_id in transmissions:
-            threads[src].add_event(
-                "Transmission Start",
-                estart=start,
-                eend=start + (end - start) // 10,
-                flow_ids=[flow_id],
-                debug=[("size", str(size))],
-            )
-            if send_candidates := [
-                (i, t)
-                for (i, t) in enumerate(threads[src].event_params)
-                if t[5] == "osend" and t[1] <= start and t[2] <= end
-            ]:
-                (send_id, send_t) = max(
-                    send_candidates,
-                    key=lambda t: t[1][1],
-                )
-                threads[src].event_params[send_id] = (
-                    send_t[0],
-                    send_t[1],
-                    send_t[2],
-                    send_t[3],
-                    [flow_id, *send_t[4]] if send_t[4] else [flow_id],
-                    send_t[5],
-                    send_t[6],
-                )
-
-            threads[dst].add_event(
-                "Transmission End",
-                estart=end - (end - start) // 10,
-                eend=end,
-                flow_ids=[flow_id],
-                debug=[("size", str(size))],
-            )
-            if recv_candidates := [
-                (i, t)
-                for (i, t) in enumerate(threads[dst].event_params)
-                if t[5] == "orecv" and start <= t[1] and end <= t[2]
-            ]:
-                (recv_id, recv_t) = min(
-                    recv_candidates,
-                    key=lambda t: t[1][1],
-                )
-                threads[dst].event_params[recv_id] = (
-                    recv_t[0],
-                    recv_t[1],
-                    recv_t[2],
-                    recv_t[3],
-                    [flow_id, *recv_t[4]] if recv_t[4] else [flow_id],
-                    recv_t[5],
-                    recv_t[6],
-                )
-
-        # Add all our threads to our process
-        for i, t in enumerate(threads):
-            process.add_thread(i, t)
-
-        # Finally serialize the trace file
-        trace = TTrace()
-        trace.inject([process])
-        trace.serialize_to_file(out_file)
-    pass
+    # Write generated trace to out_file
+    trace.serialize_to_file(out_file)
 
 
 if __name__ == "__main__":
