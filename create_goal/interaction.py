@@ -74,6 +74,8 @@ def inject_mount(network: 'DirectDriveNetwork', host_id: int):
     mds_builder.require_dependency(lbl_mds_load, lbl_mds_req)
     mds_builder.require_dependency(lbl_mds_resp, lbl_mds_load)
 
+    return [lbl_host_resp]
+
 
 def resolve_to_slices_and_sizes(slice_map: SliceMap, data_start: int, data_end: int) -> List[Tuple[SliceId, int]]:
     # By doing this manually we can terminate early by only looking once at the data
@@ -89,7 +91,7 @@ def resolve_to_slices_and_sizes(slice_map: SliceMap, data_start: int, data_end: 
     return results
 
 
-def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length: int):
+def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length: int, depends_on=[]):
     get_new_tag = network.get_next_tag
     get_builder = network.get_builder
 
@@ -109,6 +111,8 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
         id: get_builder(network.topology.get_ccs(network.slice_resp[id]))
         for (id, _) in slice_ids
     }
+
+    result_lbls = []
 
     # for (id, _) in slice_ids:
     for (id, size) in slice_ids:
@@ -161,15 +165,20 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
         lbl_host_resp_slice = host_builder.add_recv(
             size, bss_rank, recv_tag)
         # We don't need this later on
-        del lbl_host_resp_slice
 
         # Dependencies
         host_builder.require_dependency(lbl_host_req_slice, lbl_host_resp_sqn)
-        bss_builder.require_dependency(
-            lbl_bss_resp_slice, lbl_bss_req_slice)
+        bss_builder.require_dependency(lbl_bss_resp_slice, lbl_bss_req_slice)
+
+        for d in depends_on:
+            host_builder.require_dependency(lbl_host_req_sqn, d)
+
+        result_lbls.append(lbl_host_resp_slice)
+
+    return result_lbls
 
 
-def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, length: int):
+def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, length: int, depends_on=[]):
     get_new_tag = network.get_next_tag
     get_builder = network.get_builder
 
@@ -190,6 +199,7 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
         for (id, _) in slice_ids
     }
 
+    result_lbls = []
     for (id, size) in slice_ids:
         ccs_builder = ccs_builders.get(id)
         assert ccs_builder, f"CCS builder for slice {id} missing"
@@ -246,6 +256,8 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
         lbl_host_sqn_resp = host_builder.add_recv(
             LOOKUP_RESP_SIZE, ccs_rank, host_sqn_tag)
 
+        result_lbls.append(lbl_host_sqn_resp)
+
         # TODO pjordan: Figure out how to support quorums beside N=M
         # Quorum check before sending back the promise
         for lbl_ccs_sqn in sqn_promise_lbls:
@@ -253,3 +265,8 @@ def inject_write(network: 'DirectDriveNetwork', host_id: int, start: Addr, lengt
 
         host_builder.require_dependency(
             lbl_host_sqn_resp, lbl_host_req_sqn)
+
+        for d in depends_on:
+            host_builder.require_dependency(lbl_host_req_sqn, d)
+
+    return result_lbls

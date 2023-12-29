@@ -36,7 +36,8 @@ def cli(debug):
 @click.option('--next-slb-strategy', default='round-robin', help="Strategy to decide on next SLB")
 @click.option('--topology-strategy', default='grouped-by-kind', help=f"Strategy to use to spread elements across network (One of: {VALID_TOPOLOGY_STRATEGIES})")
 @click.option('--rank-names-dest', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
-def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy, topology_strategy, rank_names_dest):
+@click.option('--op-depens/--no-op-depens', default=True, help='Whether operations of the same host should require termination before the next operation can be executed')
+def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy, topology_strategy, rank_names_dest, op_depens):
     disk_size = 1024*1024*1024
     slice_size *= 1024
     host_count = 1
@@ -70,7 +71,7 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
         f"Creating network (Slice Size: {slice_size//1024}kB; Disk Size: {disk_size//1024}kB)")
     network = DirectDriveNetwork(
         topology=topology, slice_size=slice_size, disk_size=disk_size,
-        next_slb_strategy=next_slb_strategy,
+        next_slb_strategy=next_slb_strategy, op_depens=op_depens
     )
 
     # Add Interactions

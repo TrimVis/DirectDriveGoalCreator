@@ -176,6 +176,10 @@ class DirectDriveNetwork:
 
     builders: List[RankBuilder]
 
+    op_depens: bool
+    known_hosts: List[int] = []
+    host_dependencies: Dict[int, List[str]] = {}
+
     def __init__(self, topology: NetworkTopology,
                  disk_size: int, slice_size: int,
                  next_ccs_strategy: Optional[NextStrategy] = None,
@@ -183,11 +187,13 @@ class DirectDriveNetwork:
                  next_gs_strategy: Optional[NextStrategy] = None,
                  next_slb_strategy: Optional[NextStrategy] = None,
                  next_mds_strategy: Optional[NextStrategy] = None,
+                 op_depens: bool = True
                  ):
         logger.info("Creating DirectDriveNetwork with:")
         logger.info("disk sizes: {}; slice_size: {}", disk_size, slice_size)
         assert topology.is_valid(), "Network topology invalid: All entries should be >= 1"
         self.topology = topology
+        self.op_depens = op_depens
 
         # TODO pjordan: These args are a little weird
         # resp and slice_map creation should be handled in a different place
@@ -254,21 +260,28 @@ class DirectDriveNetwork:
 
     def add_interaction(self, *, op_code: str, asu: int,
                         address: int, size: int):
+        # Add mount on first interaction
+        if asu not in self.known_hosts:
+            self.host_dependencies[asu] = self.add_mount(asu)
+
+        deps = self.host_dependencies[asu] if self.op_depens else []
         if op_code == "r":
-            self.add_read(asu, address, size)
+            self.host_dependencies[asu] = self.add_read(
+                asu, address, size, depends_on=deps)
         elif op_code == "w":
-            self.add_write(asu, address, size)
+            self.host_dependencies[asu] = self.add_write(
+                asu, address, size, depends_on=deps)
         else:
             raise Exception("Unknown interaction type!")
 
-    def add_read(self, host: int, address: Addr, size: int):
-        inject_read(self, host, address, size)
+    def add_read(self, host: int, address: Addr, size: int, depends_on=[]):
+        return inject_read(self, host, address, size, depends_on=depends_on)
 
-    def add_write(self, host: int, address: Addr, size: int):
-        inject_write(self, host, address, size)
+    def add_write(self, host: int, address: Addr, size: int, depends_on=[]):
+        return inject_write(self, host, address, size, depends_on=depends_on)
 
     def add_mount(self, host: int):
-        inject_mount(self, host)
+        return inject_mount(self, host)
 
     def to_goal(self, dest_file: str = "./out.goal"):
         logger.info("Creating goal file at: {}", dest_file)
