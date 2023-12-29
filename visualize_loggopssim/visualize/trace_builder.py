@@ -7,6 +7,18 @@ from tqdm import tqdm
 from .perfetto_wrapper import TProcess, TThread, TTrace, get_unique_uuid
 
 
+def get_rank_label(rank_map, rank_id, descriptive=True):
+    rank_label = rank_map.get(f"{rank_id}")
+    if not descriptive:
+        return rank_label or f"Rank {rank_id}"
+
+    if rank_label:
+        rank_label = f"Rank {rank_id}: " + rank_label
+    else:
+        rank_label = f"Rank {rank_id}"
+    return rank_label
+
+
 def id_generator():
     # Can't start at 0 as this is per default the "swapper"
     v = 1
@@ -76,38 +88,35 @@ class KindUtils:
 
             for rank_id in range(num_ranks):
                 thread_id = next(self.id_gen)
-                rank_label = rank_map.get(f"{rank_id}", f"Rank {rank_id}")
-                self.threads.append(
-                    TThread(thread_id, rank_label + " ||"))
+                rank_label = get_rank_label(rank_map, rank_id)
+                self.threads.append(TThread(thread_id, rank_label))
         elif self.kind == Kind.ADVANCED:
             self.cpu_threads = []
             self.nuc_threads = []
 
             for rank_id in range(num_ranks):
-                rank_label = rank_map.get(f"{rank_id}", f"Rank {rank_id}")
+                rank_label = get_rank_label(rank_map, rank_id)
                 # get next available ids for threads
                 cpu_id = next(self.id_gen)
                 nuc_id = next(self.id_gen)
-                self.cpu_threads.append(
-                    TThread(cpu_id, "(CPU) " + rank_label + " ||"))
-                self.nuc_threads.append(
-                    TThread(nuc_id, "(NUC) " + rank_label + " ||"))
+                self.cpu_threads.append(TThread(cpu_id, rank_label + " (CPU)"))
+                self.nuc_threads.append(TThread(nuc_id, rank_label + " (NUC)"))
         elif self.kind == Kind.EXPERT:
             self.cpu_threads = []
             self.bidirectional_channels = {}
 
             for rank_id in range(num_ranks):
-                rank_label = rank_map.get(f"{rank_id}", f"Rank {rank_id}")
+                rank_label = get_rank_label(rank_map, rank_id)
                 # get next available id for cpu thread
                 cpu_id = next(self.id_gen)
-                self.cpu_threads.append(
-                    TThread(cpu_id, "(CPU) " + rank_label + " ||"))
+                self.cpu_threads.append(TThread(cpu_id, rank_label + " (CPU)"))
                 # add bidirectional channels for all ranks larger than current rank
                 self.bidirectional_channels[rank_id] = {
                     i: TThread(
                         next(self.id_gen),
-                        "(NUC) " + rank_label + " <-> " +
-                        rank_map.get(f"{i}", f"Rank {i}") + " ||"
+                        rank_label + " <-> " +
+                        get_rank_label(rank_map, i)
+                        + " (NUC)"
                     )
                     for i in range(rank_id + 1, num_ranks)
                 }
@@ -221,8 +230,8 @@ class TraceBuilder:
                                  op=op, debug=debug_vars)
                 pbar.update(1)
 
-        for t in transmissions:
-            self._inject_transmission(*t)
+        for (src, dst, start, end, size) in transmissions:
+            self._inject_transmission(src, dst, start, end - 1, size)
             pbar.update(1)
 
     # NOTE pjordan: this is a little bit of a clusterfuck, we are breaking all
@@ -237,12 +246,18 @@ class TraceBuilder:
             nuc_thread = self._utils.get_from_thread_list(
                 src, ChannelKind.NUC, o_rank_id=dst)
             assert nuc_thread
+            assert start <= end
             nuc_thread.add_event(
                 transmit_name,
                 estart=start,
+                # etime=end,
                 eend=end,
                 flow_ids=[flow_id],
-                debug=[("size", str(size))],
+                debug=[
+                    ("size", str(size)),
+                    ("estart", str(start)),
+                    ("eend", str(end)),
+                ],
             )
 
         src_thread = self._utils.get_from_thread_list(src, ChannelKind.CPU)
@@ -250,7 +265,9 @@ class TraceBuilder:
         if send_candidates := [
             (i, t)
             for (i, t) in enumerate(src_thread.event_params)
-            if t[5] == Operations.SEND.value and t[1] <= start and t[2] <= end
+            if t[5] == Operations.SEND.value
+            and int(t[2]) <= int(start)
+            and not t[4]
         ]:
             (send_id, send_t) = max(
                 send_candidates,
@@ -261,7 +278,7 @@ class TraceBuilder:
                 send_t[1],
                 # Extend end time for send event to the transmit end time
                 # in simple mode
-                send_t[2] if self._kind != Kind.SIMPLE else end,
+                send_t[2],  # send_t[2] if self._kind != Kind.SIMPLE else end,
                 send_t[3],
                 [flow_id, *send_t[4]] if send_t[4] else [flow_id],
                 send_t[5],
@@ -273,13 +290,15 @@ class TraceBuilder:
         if recv_candidates := [
             (i, t)
             for (i, t) in enumerate(dst_thread.event_params)
-            if t[5] == Operations.RECV.value and start <= t[1]
-            and end <= t[2] and not t[4]
+            if t[5] == Operations.RECV.value
+            and end <= t[1]
+            and not t[4]
         ]:
             (recv_id, recv_t) = min(
                 recv_candidates,
                 key=lambda t: t[1][1],
             )
+
             dst_thread.event_params[recv_id] = (
                 recv_t[0],
                 recv_t[1],

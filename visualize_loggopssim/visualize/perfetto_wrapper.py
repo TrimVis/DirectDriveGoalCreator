@@ -1,4 +1,6 @@
+import os
 from random import randint
+from pathlib import Path
 
 from .perfetto_trace_pb2 import (
     Trace,
@@ -18,8 +20,8 @@ TRUSTED_PACKET_SEQ_ID = randint(0, 2**16)
 
 
 def get_unique_uuid():
-    uuid = None
-    while not uuid or uuid in KNOWN_UUIDS:
+    uuid = randint(0, MAX_UUID)
+    while uuid in KNOWN_UUIDS:
         uuid = randint(0, MAX_UUID)
 
     KNOWN_UUIDS.append(uuid)
@@ -45,19 +47,32 @@ class TThread:
         ), "The event has to be instant or a slice, not both"
 
         # This is used as an intermediary, so we can after the fact inject flows
-        self.event_params += [(ename, estart, eend, etime, flow_ids, op, debug)]
+        self.event_params += [(ename, estart, eend,
+                               etime, flow_ids, op, debug)]
 
     def inject_event(self, packet_list, ename, estart, eend, etime, flow_ids, debug):
+        # There are issues with partial overlaps if we don't create a new track for everything
+        # event_uuid = self.uuid
+        event_uuid = get_unique_uuid()
+        packet_list += [
+            TracePacket(
+                track_descriptor=TrackDescriptor(
+                    uuid=event_uuid,
+                    name=self.tname,  # + " - " + ename,
+                    parent_uuid=self.uuid,
+                ),
+            )]
         if estart is not None:
             packet_list += [
                 TracePacket(
                     timestamp=estart,
                     track_event=TrackEvent(
                         type=TrackEvent.Type.TYPE_SLICE_BEGIN,
-                        track_uuid=self.uuid,
+                        track_uuid=event_uuid,
                         flow_ids=flow_ids,
                         name=ename,
-                        debug_annotations=[DebugAnnotation(name=k, string_value=v) for (k, v) in debug] if debug else None,
+                        debug_annotations=[DebugAnnotation(name=k, string_value=v) for (
+                            k, v) in debug] if debug else None,
                     ),
                     trusted_packet_sequence_id=TRUSTED_PACKET_SEQ_ID,
                 )
@@ -68,7 +83,7 @@ class TThread:
                     timestamp=eend,
                     track_event=TrackEvent(
                         type=TrackEvent.Type.TYPE_SLICE_END,
-                        track_uuid=self.uuid,
+                        track_uuid=event_uuid,
                     ),
                     trusted_packet_sequence_id=TRUSTED_PACKET_SEQ_ID,
                 )
@@ -80,9 +95,10 @@ class TThread:
                     timestamp=etime,
                     track_event=TrackEvent(
                         type=TrackEvent.Type.TYPE_INSTANT,
-                        track_uuid=self.uuid,
+                        track_uuid=event_uuid,
                         name=ename,
-                        debug_annotations=[DebugAnnotation(name=k, string_value=v) for (k, v) in debug] if debug else None,
+                        debug_annotations=[DebugAnnotation(name=k, string_value=v) for (
+                            k, v) in debug] if debug else None,
                     ),
                     trusted_packet_sequence_id=TRUSTED_PACKET_SEQ_ID,
                 )
@@ -92,13 +108,14 @@ class TThread:
         # Inject thread initializer
         thread_init_packet = TracePacket(
             track_descriptor=TrackDescriptor(
+                name=self.tname,
                 uuid=self.uuid,
                 parent_uuid=parent.uuid,
-                thread=ThreadDescriptor(
-                    pid=parent.pid,
-                    tid=self.tid,
-                    thread_name=self.tname,
-                ),
+                # thread=ThreadDescriptor(
+                #     pid=parent.pid,
+                #     tid=self.tid,
+                #     thread_name=self.tname,
+                # ),
             ),
             trusted_packet_sequence_id=TRUSTED_PACKET_SEQ_ID,
         )
@@ -106,7 +123,8 @@ class TThread:
 
         # Inject all events
         for ename, estart, eend, etime, flow_ids, _, debug in self.event_params:
-            self.inject_event(packet_list, ename, estart, eend, etime, flow_ids, debug)
+            self.inject_event(packet_list, ename, estart,
+                              eend, etime, flow_ids, debug)
 
 
 class TProcess:
@@ -154,5 +172,9 @@ class TTrace:
         return trace.SerializeToString()
 
     def serialize_to_file(self, file_path):
+        # Create all the parent folders
+        parent = Path(file_path).parent.absolute()
+        os.makedirs(parent, exist_ok=True)
+        # Write to destination
         with open(file_path, "wb+") as f:
             f.write(self.serialize())
