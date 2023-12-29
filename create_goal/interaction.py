@@ -4,10 +4,10 @@ from math import ceil
 from .common import Addr, SliceId, SliceMap
 
 # Request Config
-LOOKUP_REQ_SIZE: int = 256
-LOOKUP_RESP_SIZE: int = 1024
-MOUNT_REQ_SIZE: int = 1024
-MOUNT_RESP_SIZE: int = 1024
+LOOKUP_REQ_SIZE: int = 256 * 4
+LOOKUP_RESP_SIZE: int = 1024 * 4
+MOUNT_REQ_SIZE: int = 1024 * 4
+MOUNT_RESP_SIZE: int = 1024 * 4
 
 
 # Interaction time
@@ -56,32 +56,26 @@ def inject_mount(network: 'DirectDriveNetwork', host_id: int):
     lbl_mds_load = mds_builder.add_calc(calc_io_time(MOUNT_RESP_SIZE, 'read'))
 
     # Step 3: Reply with map of slices
-    #   MDS -> SLB -> GS -> Host
+    #   MDS -> GS -> SLB -> Host
     resp_tag = get_new_tag()
-    lbl_mds_resp = mds_builder.add_send(MOUNT_RESP_SIZE, slb_rank, resp_tag)
-    lbl_slb_resp_i = slb_builder.add_recv(MOUNT_RESP_SIZE, mds_rank, resp_tag)
-    lbl_slb_resp_o = slb_builder.add_send(MOUNT_RESP_SIZE, gs_rank, resp_tag)
-    lbl_gs_resp_i = gs_builder.add_recv(MOUNT_RESP_SIZE, slb_rank, resp_tag)
-    lbl_gs_resp_o = gs_builder.add_send(MOUNT_RESP_SIZE, host_rank, resp_tag)
-    lbl_host_resp = host_builder.add_recv(MOUNT_RESP_SIZE, gs_rank, resp_tag)
+    lbl_mds_resp = mds_builder.add_send(MOUNT_RESP_SIZE, gs_rank, resp_tag)
+    lbl_gs_resp_i = gs_builder.add_recv(MOUNT_RESP_SIZE, mds_rank, resp_tag)
+    lbl_gs_resp_o = gs_builder.add_send(MOUNT_RESP_SIZE, slb_rank, resp_tag)
+    lbl_slb_resp_i = slb_builder.add_recv(MOUNT_RESP_SIZE, gs_rank, resp_tag)
+    lbl_slb_resp_o = slb_builder.add_send(MOUNT_RESP_SIZE, host_rank, resp_tag)
+    lbl_host_resp = host_builder.add_recv(MOUNT_RESP_SIZE, slb_rank, resp_tag)
 
     # Dependencies
     host_builder.require_dependency(lbl_host_resp, lbl_host_req)
-    slb_builder.require_dependency(lbl_slb_req_o, lbl_slb_req_i)
-    slb_builder.require_dependency(lbl_slb_resp_o, lbl_slb_resp_i)
     gs_builder.require_dependency(lbl_gs_req_o, lbl_gs_req_i)
     gs_builder.require_dependency(lbl_gs_resp_o, lbl_gs_resp_i)
+    slb_builder.require_dependency(lbl_slb_req_o, lbl_slb_req_i)
+    slb_builder.require_dependency(lbl_slb_resp_o, lbl_slb_resp_i)
     mds_builder.require_dependency(lbl_mds_load, lbl_mds_req)
     mds_builder.require_dependency(lbl_mds_resp, lbl_mds_load)
 
 
 def resolve_to_slices_and_sizes(slice_map: SliceMap, data_start: int, data_end: int) -> List[Tuple[SliceId, int]]:
-    # results = [
-    #     (sid, min(end, data_end) - min(start, data_start))
-    #     for (sid, (start, end)) in enumerate(slice_map)
-    #     if end >= data_start and data_end >= start
-    # ]
-
     # By doing this manually we can terminate early by only looking once at the data
     results = []
     for (sid, (start, end)) in enumerate(slice_map):
@@ -116,8 +110,9 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
         for (id, _) in slice_ids
     }
 
-    # Part A: Request all SqNs (Assumption)
-    for (id, _) in slice_ids:
+    # for (id, _) in slice_ids:
+    for (id, size) in slice_ids:
+        # Part A: Request all SqNs (Assumption)
         ccs_builder = ccs_builders.get(id)
         assert ccs_builder, f"CCS builder for slice {id} missing"
         ccs_rank = ccs_builder.rank_id
@@ -143,8 +138,7 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             lbl_host_resp_sqn, lbl_host_req_sqn)
         ccs_builder.require_dependency(lbl_ccs_resp_sqn, lbl_ccs_req_sqn)
 
-    # Part B: Read all slice data
-    for (id, size) in slice_ids:
+        # Part B: Read all slice data
         resp_bss_builders = bss_builders.get(id)
         assert resp_bss_builders, f"BSS builders for slice {id} missing"
         bss_builder = resp_bss_builders[network.get_next_bss(
@@ -166,10 +160,11 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             size, host_rank, recv_tag)
         lbl_host_resp_slice = host_builder.add_recv(
             size, bss_rank, recv_tag)
+        # We don't need this later on
+        del lbl_host_resp_slice
 
-        # Step 1-3: Dependencies
-        host_builder.require_dependency(
-            lbl_host_resp_slice, lbl_host_req_slice)
+        # Dependencies
+        host_builder.require_dependency(lbl_host_req_slice, lbl_host_resp_sqn)
         bss_builder.require_dependency(
             lbl_bss_resp_slice, lbl_bss_req_slice)
 
