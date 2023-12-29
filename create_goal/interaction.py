@@ -17,11 +17,11 @@ def calc_io_time(data_size: int, kind: Literal['read'] | Literal['write']):
     # TODO pjordan: Find a more reputable value for this
 
     if kind == 'read':
-        # 6000 MB/s => 1e6/(6000 * 1e6) ms/B = 1/6000 ms/B
-        per_byte_cost = 1/6000
+        # 6000 MB/s => 1e9/(6000 * 1e6) ns/B = 1/6 ns/B
+        per_byte_cost = 1/6
     else:
         # 1500 MB/s
-        per_byte_cost = 1/1500
+        per_byte_cost = 1/1.5
     return ceil(data_size * per_byte_cost)
 
 
