@@ -1,9 +1,12 @@
 import json
 import math
+import time
 import random
+import os
 from loguru import logger
 from tqdm import tqdm
 from typing import List, Optional, Dict, Literal
+from pathlib import Path
 
 from .rank import RankBuilder
 from .interaction import inject_mount, inject_read, inject_write
@@ -177,6 +180,8 @@ class DirectDriveNetwork:
     builders: List[RankBuilder]
 
     op_depens: bool
+    inplace: bool = False
+    inplace_file: Optional[str] = None
     known_hosts: List[int] = []
     host_dependencies: Dict[int, List[str]] = {}
 
@@ -187,13 +192,24 @@ class DirectDriveNetwork:
                  next_gs_strategy: Optional[NextStrategy] = None,
                  next_slb_strategy: Optional[NextStrategy] = None,
                  next_mds_strategy: Optional[NextStrategy] = None,
-                 op_depens: bool = True
+                 op_depens: bool = True,
+                 dump_state: bool = False,
+                 dump_folder: str = f"/tmp/create_goal/exec_{round(time.time())}/"
                  ):
         logger.info("Creating DirectDriveNetwork with:")
         logger.info("disk sizes: {}; slice_size: {}", disk_size, slice_size)
         assert topology.is_valid(), "Network topology invalid: All entries should be >= 1"
         self.topology = topology
         self.op_depens = op_depens
+        self.dump_state = dump_state
+        self.dump_folder = dump_folder
+        assert not dump_state or dump_folder is not None, "None is not a valid value for the dump folder"
+
+        if self.dump_state:
+            logger.info("Creating dump folder to keep state:")
+            # Create all the parent folders
+            parent = Path(self.dump_folder).absolute()
+            os.makedirs(parent, exist_ok=True)
 
         # TODO pjordan: These args are a little weird
         # resp and slice_map creation should be handled in a different place
@@ -220,7 +236,8 @@ class DirectDriveNetwork:
         logger.debug("Creating builders")
         no_ranks = self.topology.get_total_ranks()
         self.builders = [
-            RankBuilder(rid, self.get_next_label)
+            RankBuilder(rid, self.get_next_label,
+                        dump_dir=self.dump_folder if self.dump_state else None)
             for rid in range(no_ranks)
         ]
 
@@ -285,14 +302,21 @@ class DirectDriveNetwork:
 
     def to_goal(self, dest_file: str = "./out.goal"):
         logger.info("Creating goal file at: {}", dest_file)
+
+        # Create all the parent folders
+        parent = Path(dest_file).parent.absolute()
+        os.makedirs(parent, exist_ok=True)
+
         with open(dest_file, 'w+') as f:
             # Create 'header' containing the num ranks
             no_ranks = self.topology.get_total_ranks()
             header = f'num_ranks {no_ranks}\n\n'
             f.write(header)
             for b in tqdm(self.builders):
-                f.write(b.serialize())
+                rank_res = b.serialize()
+                f.write(rank_res)
                 f.write('\n')
+                del b, rank_res
 
     def get_builder(self, rank_id: int):
         return self.builders[rank_id]
