@@ -42,6 +42,12 @@ network.to_goal("./out.goal")
 
 Check our the `cli_cs` function in `create_goal/__main__.py` to see a detailed example of how to inject and create own custom DirectDrive IO interactions from python code.
 
+## The issue of large files
+Due to the nature of the goal files, the generated output goal file and intermediate files generated can be quite large.
+If you experience a OS Level 'No space left on device' error, and your `df -h` reports that your /tmp partition is full, resize the tmp filesystem accordingly using:
+`sudo mount -o remount,size=60G /tmp/`
+(Beware: for large traces 60G might not be enough)
+
 ## Resources
 [^1]: [uMass Site](https://traces.cs.umass.edu/index.php/storage/storage)
 [^2]: [uMass CSV Spec](https://skulddata.cs.umass.edu/traces/storage/SPC-Traces.pdf)
