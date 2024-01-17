@@ -1,6 +1,5 @@
 import json
 import math
-import time
 import random
 import os
 from loguru import logger
@@ -10,7 +9,8 @@ from pathlib import Path
 
 from .rank import RankBuilder
 from .interaction import inject_mount, inject_read, inject_write
-from .common import Addr, Id, SliceMap, SliceResponsibility, BssResponsibility
+from .common import Addr, Id, SliceMap, SliceResponsibility, \
+    BssResponsibility, DEFAULT_DUMP_DIR
 
 VALID_TOPOLOGY_STRATEGIES = ['grouped-by-kind', 'fat-tree']
 TopologyStrategy = Literal['grouped-by-kind', 'fat-tree']
@@ -194,7 +194,7 @@ class DirectDriveNetwork:
                  next_mds_strategy: Optional[NextStrategy] = None,
                  op_depens: bool = True,
                  dump_state: bool = False,
-                 dump_folder: str = f"/tmp/create_goal/exec_{round(time.time())}/"
+                 dump_folder: str = DEFAULT_DUMP_DIR
                  ):
         logger.info("Creating DirectDriveNetwork with:")
         logger.info("disk sizes: {}; slice_size: {}", disk_size, slice_size)
@@ -313,10 +313,13 @@ class DirectDriveNetwork:
             header = f'num_ranks {no_ranks}\n\n'
             f.write(header)
             for b in tqdm(self.builders):
-                rank_res = b.serialize()
-                f.write(rank_res)
-                f.write('\n')
-                del b, rank_res
+                if self.dump_state:
+                    b.serialize(append_file=f)
+                else:
+                    rank_res = b.serialize()
+                    assert rank_res is not None, "unreachable"
+                    f.write(rank_res)
+                    del rank_res
 
     def get_builder(self, rank_id: int):
         return self.builders[rank_id]

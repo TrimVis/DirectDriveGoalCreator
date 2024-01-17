@@ -72,14 +72,23 @@ class RankBuilder:
         line = f"{label0} requires {label1}"
         self.add_line(line)
 
-    def serialize(self):
+    def serialize(self, append_file: Optional[TextIOWrapper] = None):
         if self.use_file:
             assert self._lines_file is not None, "unreachable - lines_file is None"
             self._lines_file.flush()
+
             assert self._lines_file_path is not None, "unreachable - lines_file_path is None"
             with open(self._lines_file_path, "r") as file:
-                result = file.read()
+                if append_file is None:
+                    return file.read() + "}"
+                else:
+                    for line in file:
+                        append_file.write(line)
+                    append_file.write("}\n")
         else:
-            result = '\n'.join(self._lines)
-
-        return result + "}"
+            if append_file is None:
+                return '\n'.join(self._lines) + "}"
+            else:
+                for line in self._lines:
+                    append_file.write(line)
+                append_file.write("}\n")
