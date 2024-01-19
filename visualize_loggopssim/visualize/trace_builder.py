@@ -151,8 +151,9 @@ class TraceBuilder:
         return self
 
     def rank_name_map(self, rank_name_map_path):
-        with open(rank_name_map_path, "r") as f:
-            self._rank_mappings = json.loads(f.read())
+        if rank_name_map_path is not None:
+            with open(rank_name_map_path, "r") as f:
+                self._rank_mappings = json.loads(f.read())
         return self
 
     def viz_file(self, in_file):
