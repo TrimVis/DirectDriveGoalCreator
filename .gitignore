@@ -1,2 +1,4 @@
 __pycache__
 venv
+visualize_loggopssim/perfetto_webserver
+*.trace
