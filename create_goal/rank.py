@@ -26,8 +26,9 @@ class RankBuilder:
         self.add_line(f"rank {self.rank_id} {{")
 
     def __del__(self):
-        assert self._lines_file is not None, "unreachable"
-        self._lines_file.close()
+        if self.use_file:
+            assert self._lines_file is not None, "unreachable"
+            self._lines_file.close()
 
     def add_line(self, line):
         if not self.use_file:
