@@ -122,7 +122,9 @@ def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, sl
         topology.to_file(rank_names_dest)
 
     network = DirectDriveNetwork(
-        topology=topology, slice_size=slice_size, disk_size=disk_size)
+        topology=topology, slice_size=slice_size, disk_size=disk_size,
+        dump_state=True, op_depens=True
+    )
 
     pbar = tqdm(total=(reads*host_count + writes *
                 host_count + (host_count if mount else 0)))

@@ -32,7 +32,7 @@ class RankBuilder:
 
     def add_line(self, line):
         if not self.use_file:
-            self._lines.append(line)
+            self._lines.append(line + '\n')
         else:
             assert self._lines_file, "Unreachable"
             self._lines_file.write(line + '\n')
@@ -88,7 +88,7 @@ class RankBuilder:
                     append_file.write("}\n")
         else:
             if append_file is None:
-                return '\n'.join(self._lines) + "}"
+                return ''.join(self._lines) + "}\n"
             else:
                 for line in self._lines:
                     append_file.write(line)
