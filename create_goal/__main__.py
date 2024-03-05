@@ -38,7 +38,8 @@ def cli(debug):
 @click.option('--rank-names-dest', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
 @click.option('--op-depens/--no-op-depens', default=True, help='Whether operations of the same host should require termination before the next operation can be executed')
 @click.option('--dump-state/--no-dump-state', default=True, help='Will dump the state to disk and delete local references to reduce memory footprint significantly.')
-def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy, topology_strategy, rank_names_dest, op_depens, dump_state):
+@click.option('--max-no-instructions', type=int, default=None, help='Only read the first X instructions from the trace file.')
+def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, next_slb_strategy, topology_strategy, rank_names_dest, op_depens, dump_state, max_no_instructions):
     disk_size = 1024*1024*1024
     slice_size *= 1024
     host_count = 1
@@ -50,7 +51,10 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
         for (asu, lba, size, opcode, *_) in tqdm(reader):
             host_count = max(host_count, int(asu) + 1)
             disk_size = max(int(lba) + int(size), disk_size)
+
             csv_line_no += 1
+            if max_no_instructions is not None and csv_line_no > max_no_instructions:
+                break
 
     # Create Network Topology
     logger.info(
@@ -80,9 +84,12 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
     logger.info("Adding interactions")
     with open(trace_path, 'r') as f:
         reader = csv.reader(f)
-        for (asu, lba, size, opcode, *_) in tqdm(reader, total=csv_line_no):
+        for (i, (asu, lba, size, opcode, *_)) in tqdm(enumerate(reader), total=csv_line_no):
             network.add_interaction(op_code=opcode, asu=int(asu),
                                     address=int(lba), size=int(size))
+
+            if max_no_instructions is not None and i > max_no_instructions:
+                break
 
     # Finalize
     logger.info(f"Writing goal file to '{out_path}'")
