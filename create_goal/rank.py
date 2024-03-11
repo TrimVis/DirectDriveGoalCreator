@@ -22,12 +22,14 @@ class RankBuilder:
             self._lines_file_path = (
                 Path(dump_dir) / f"rank_{self.rank_id}.state").absolute()
             self._lines_file = open(self._lines_file_path, 'a')
+        else:
+            self._lines = []
 
         self.add_line(f"rank {self.rank_id} {{")
 
     def __del__(self):
         if self.use_file:
-            assert self._lines_file is not None, "unreachable"
+            assert self._lines_file, "Unreachable"
             self._lines_file.close()
 
     def add_line(self, line):

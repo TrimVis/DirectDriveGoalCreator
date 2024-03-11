@@ -163,5 +163,75 @@ def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, sl
     network.to_goal(out_file)
 
 
+@cli.command(name="worst-case", help="Creates a goal file of a simple network and adds for each host highly congested read and writes")
+@click.option('--writes', default=8, help='No. of random writes per host in network')
+@click.option('--reads', default=8, help='No. of random read per host in network')
+@click.option('--repeats', default=2, help='No. of repeats of the read/write cycle')
+@click.option('--mount/--no-mount', default=True, help='Also simulate mount operation for each host')
+@click.option('--disk-size', default=4096, help='Disk size in kB')
+@click.option('--slice-size', default=64, help='Slice size in kB')
+@click.option('--host-count', default=4, help='No. of hosts in network')
+@click.option('--slb-count', default=1, help='No of Software Load Balancers in network')
+@click.option('--gs-count', default=1, help='No of Gateway Switches in network')
+@click.option('--mds-count', default=1, help='No of MetaData Services in network')
+@click.option('--ccs-count', default=4, help='No of Change Coordinator Services in network')
+@click.option('--bss-count', default=4, help='No of Block Storage Services in network')
+@click.option('--topology-strategy', default='grouped-by-kind', help=f"Strategy to use to spread elements across network (One of: {VALID_TOPOLOGY_STRATEGIES})")
+@click.option('--rank-names-dest', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
+@click.option('--dump-state/--no-dump-state', default=True, help='Will dump the state to disk and delete local references to reduce memory footprint significantly.')
+@click.argument('out_file', type=click.Path(exists=False, writable=True, dir_okay=False, resolve_path=True))
+def cli_wc(out_file, writes, reads, mount, host_count, disk_size, slice_size, slb_count, gs_count, mds_count, ccs_count, bss_count, topology_strategy, rank_names_dest, repeats, dump_state):
+    """ Creates a simple network and random reads and writes in it """
+    disk_size *= 1024
+    slice_size *= 1024
+
+    topology = NetworkTopology(
+        host_count=host_count,
+        slb_count=slb_count,
+        gs_count=gs_count,
+        mds_count=mds_count,
+        ccs_count=ccs_count,
+        bss_count=bss_count,
+        strategy=topology_strategy
+    )
+    if rank_names_dest:
+        topology.to_file(rank_names_dest)
+
+    network = DirectDriveNetwork(
+        topology=topology, slice_size=slice_size, disk_size=disk_size,
+        dump_state=dump_state, op_depens=True
+    )
+
+    pbar = tqdm(total=(repeats*reads*host_count + repeats*writes *
+                host_count + (host_count if mount else 0)))
+    if mount:
+        logger.info("Adding Mount Interactions")
+        for h in range(host_count):
+            network.add_mount(h)
+        pbar.update(host_count)
+
+    for r in range(repeats):
+        if reads:
+            logger.info(f"Adding Read Interactions (Rep {r})")
+            for _ in range(reads):
+                start = random.randint(0, disk_size//2)
+                end = random.randint(start, disk_size)
+                for h in range(host_count):
+                    network.add_read(h, start, end)
+                pbar.update(host_count)
+
+        if writes:
+            logger.info(f"Adding Write Interactions (Rep {r})")
+            for _ in range(writes):
+                start = random.randint(0, disk_size//2)
+                end = random.randint(start, disk_size)
+                for h in range(host_count):
+                    network.add_write(h, start, end)
+                pbar.update(host_count)
+
+    logger.info(f"Writing goal file to '{out_file}'")
+    network.to_goal(out_file)
+
+
 if __name__ == "__main__":
     cli()
