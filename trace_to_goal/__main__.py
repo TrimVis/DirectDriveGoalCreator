@@ -9,7 +9,7 @@ from tqdm import tqdm
 from .network import NetworkTopology, DirectDriveNetwork, VALID_TOPOLOGY_STRATEGIES
 
 
-@click.group(name="create_goal")
+@click.group(name="trace2goal")
 @click.option('--debug/--no-debug', default=False, help='Show debug logs')
 def cli(debug):
     # Significantly reduce what and how we log in case no debug flag is set

@@ -1,41 +1,34 @@
 #!/usr/bin/env bash
 
+# add the script directory to the pythonpath
+REPO_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+REPO_DIR=$(realpath -- "$REPO_DIR/..")
+
 DEST_DIR="$1"
+mkdir -p "$DEST_DIR"
 
-# mount only
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 0 --mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-0_mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-0_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 0 --reads 0 --mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-0_reads-0_mount_topology.json" "$DEST_DIR/host-2_writes-0_reads-0_mount.goal"
+# Iterate over each range as specified
+for host_count in 1 2; do
+    for no_reads in 0 1; do
+        for no_writes in 0 1; do
+            for mount in "no-mount" "mount"; do
+                base_name="${DEST_DIR}/host-${host_count}_writes-${no_writes}_reads-${no_reads}_${mount}"
 
-# 1 host, 1 IO operations
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 1 --reads 1 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-1_reads-1_wo-mount_topology.json" "$DEST_DIR/host-1_writes-1_reads-1_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 1 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-1_wo-mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-1_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 1 --reads 0 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-1_reads-0_wo-mount_topology.json" "$DEST_DIR/host-1_writes-1_reads-0_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 1 --reads 1 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-1_writes-1_reads-1_mount_topology.json" "$DEST_DIR/host-1_writes-1_reads-1_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 1 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-1_mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-1_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 1 --reads 0 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-1_writes-1_reads-0_mount_topology.json" "$DEST_DIR/host-1_writes-1_reads-0_mount.goal"
+                # Skip already generated files
+                if [[ -f "${base_name}.goal" ]]; then
+                    echo "File already exists! (${base_name}.goal). Skipping..."
+                    continue
+                fi
 
-# 1 host, 2 IO operations
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 2 --reads 2 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-2_reads-2_wo-mount_topology.json" "$DEST_DIR/host-1_writes-2_reads-2_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 2 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-2_wo-mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-2_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 2 --reads 0 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-1_writes-2_reads-0_wo-mount_topology.json" "$DEST_DIR/host-1_writes-2_reads-0_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 2 --reads 2 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-1_writes-2_reads-2_mount_topology.json" "$DEST_DIR/host-1_writes-2_reads-2_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 0 --reads 2 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-1_writes-0_reads-2_mount_topology.json" "$DEST_DIR/host-1_writes-0_reads-2_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 1 --writes 2 --reads 0 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-1_writes-2_reads-0_mount_topology.json" "$DEST_DIR/host-1_writes-2_reads-0_mount.goal"
-
-# 2 host, 1 IO operations
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 1 --reads 1 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-1_reads-1_wo-mount_topology.json" "$DEST_DIR/host-2_writes-1_reads-1_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 0 --reads 1 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-0_reads-1_wo-mount_topology.json" "$DEST_DIR/host-2_writes-0_reads-1_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 1 --reads 0 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-1_reads-0_wo-mount_topology.json" "$DEST_DIR/host-2_writes-1_reads-0_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 1 --reads 1 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-2_writes-1_reads-1_mount_topology.json" "$DEST_DIR/host-2_writes-1_reads-1_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 0 --reads 1 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-2_writes-0_reads-1_mount_topology.json" "$DEST_DIR/host-2_writes-0_reads-1_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 1 --reads 0 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-2_writes-1_reads-0_mount_topology.json" "$DEST_DIR/host-2_writes-1_reads-0_mount.goal"
-
-# 2 host, 2 IO operations
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 2 --reads 2 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-2_reads-2_wo-mount_topology.json" "$DEST_DIR/host-2_writes-2_reads-2_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 0 --reads 2 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-0_reads-2_wo-mount_topology.json" "$DEST_DIR/host-2_writes-0_reads-2_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 2 --reads 0 --no-mount --disk-size 1 --rank-names-dest "$DEST_DIR/host-2_writes-2_reads-0_wo-mount_topology.json" "$DEST_DIR/host-2_writes-2_reads-0_wo-mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 2 --reads 2 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-2_writes-2_reads-2_mount_topology.json" "$DEST_DIR/host-2_writes-2_reads-2_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 0 --reads 2 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-2_writes-0_reads-2_mount_topology.json" "$DEST_DIR/host-2_writes-0_reads-2_mount.goal"
-python -m create_goal simple --ccs-count 1 --bss-count 1 --host-count 2 --writes 2 --reads 0 --mount --disk-size 1    --rank-names-dest "$DEST_DIR/host-2_writes-2_reads-0_mount_topology.json" "$DEST_DIR/host-2_writes-2_reads-0_mount.goal"
-
-
+                echo "Generating host: ${host_count}; writes: ${no_writes}; reads: ${no_reads}; ${mount}"
+                "${REPO_DIR}/trace2goal" simple \
+                       --ccs-count 1 --bss-count 1 --host-count ${host_count} \
+                       --writes ${no_writes} --reads ${no_reads} \
+                       --${mount} --disk-size 1 \
+                       --rank-names-dest "${base_name}_topology.json"\
+                       "${base_name}.goal" > /dev/null
+                echo "Done: ${base_name}.goal"
+            done
+        done
+    done
+done

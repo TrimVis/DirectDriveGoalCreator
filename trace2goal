@@ -15,4 +15,4 @@ else
 fi
 
 # And run the script
-PYTHONPATH="$PYTHONPATH:$MODULE_PARENT" python -m visualize_goal ${@:1}
+PYTHONPATH="$PYTHONPATH:$MODULE_PARENT" python -m trace_to_goal ${@:1}

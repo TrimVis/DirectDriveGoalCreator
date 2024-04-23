@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-
-MODULE_PARENT=$(realpath .)
-PYTHONPATH="$PYTHONPATH:$MODULE_PARENT" python -m create_goal ${@:1}
