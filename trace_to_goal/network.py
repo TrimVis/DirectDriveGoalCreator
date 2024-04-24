@@ -275,19 +275,20 @@ class DirectDriveNetwork:
 
         logger.success("Finished DirectDriveNetwork initialization")
 
-    def add_interaction(self, *, op_code: str, asu: int,
-                        address: int, size: int):
+    def add_interaction(self, *, op_code: str, host: int,
+                        address: int, size: int, mount: bool = True):
         # Add mount on first interaction
-        if asu not in self.known_hosts:
-            self.host_dependencies[asu] = self.add_mount(asu)
+        if host not in self.known_hosts:
+            self.host_dependencies[host] = self.add_mount(
+                host) if mount else []
 
-        deps = self.host_dependencies[asu] if self.op_depens else []
+        deps = self.host_dependencies[host] if self.op_depens else []
         if op_code.lower() == "r":
-            self.host_dependencies[asu] = self.add_read(
-                asu, address, size, depends_on=deps)
+            self.host_dependencies[host] = self.add_read(
+                host, address, size, depends_on=deps)
         elif op_code.lower() == "w":
-            self.host_dependencies[asu] = self.add_write(
-                asu, address, size, depends_on=deps)
+            self.host_dependencies[host] = self.add_write(
+                host, address, size, depends_on=deps)
         else:
             raise Exception("Unknown interaction type!")
 

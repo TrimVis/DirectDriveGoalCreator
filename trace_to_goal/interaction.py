@@ -129,7 +129,8 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             LOOKUP_REQ_SIZE, host_rank, sqn_tag)
 
         # Step 2: Lookup Sqn
-        ccs_builder.add_calc(calc_io_time(LOOKUP_RESP_SIZE, 'read'))
+        lbl_ccs_lookup = ccs_builder.add_calc(
+                calc_io_time(LOOKUP_RESP_SIZE, 'read'))
 
         # Step 3: CCS -> Host(VDC): Send Sqn
         lbl_ccs_resp_sqn = ccs_builder.add_send(
@@ -140,7 +141,8 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
         # Step 1-3: Dependencies
         host_builder.require_dependency(
             lbl_host_resp_sqn, lbl_host_req_sqn)
-        ccs_builder.require_dependency(lbl_ccs_resp_sqn, lbl_ccs_req_sqn)
+        ccs_builder.require_dependency(lbl_ccs_resp_sqn, lbl_ccs_lookup)
+        ccs_builder.require_dependency(lbl_ccs_lookup, lbl_ccs_req_sqn)
 
         # Part B: Read all slice data
         resp_bss_builders = bss_builders.get(id)
@@ -157,7 +159,7 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
             LOOKUP_REQ_SIZE, host_rank, recv_tag)
 
         # Step 2: Lookup Slice data
-        bss_builder.add_calc(calc_io_time(size, 'read'))
+        lbl_bss_read = bss_builder.add_calc(calc_io_time(size, 'read'))
 
         # Step 3: BSS -> Host(VDC): Send slice data
         lbl_bss_resp_slice = bss_builder.add_send(
@@ -168,7 +170,9 @@ def inject_read(network: 'DirectDriveNetwork', host_id: int, start: Addr, length
 
         # Dependencies
         host_builder.require_dependency(lbl_host_req_slice, lbl_host_resp_sqn)
-        bss_builder.require_dependency(lbl_bss_resp_slice, lbl_bss_req_slice)
+        # bss_builder.require_dependency(lbl_bss_resp_slice, lbl_bss_req_slice)
+        bss_builder.require_dependency(lbl_bss_read, lbl_bss_req_slice)
+        bss_builder.require_dependency(lbl_bss_resp_slice, lbl_bss_read)
 
         for d in depends_on:
             host_builder.require_dependency(lbl_host_req_sqn, d)

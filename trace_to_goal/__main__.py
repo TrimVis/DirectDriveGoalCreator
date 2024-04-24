@@ -85,7 +85,7 @@ def cli_pt(trace_path, out_path, slice_size, slb_count, gs_count, mds_count, ccs
     with open(trace_path, 'r') as f:
         reader = csv.reader(f)
         for (i, (asu, lba, size, opcode, *_)) in tqdm(enumerate(reader), total=csv_line_no):
-            network.add_interaction(op_code=opcode, asu=int(asu),
+            network.add_interaction(op_code=opcode, host=int(asu),
                                     address=int(lba), size=int(size))
 
             if max_no_instructions is not None and i > max_no_instructions:
@@ -133,21 +133,20 @@ def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, sl
         dump_state=True, op_depens=True
     )
 
-    pbar = tqdm(total=(reads*host_count + writes *
-                host_count + (host_count if mount else 0)))
-    if mount:
-        logger.info("Adding Mount Interactions")
+    pbar = tqdm(total=(reads * host_count + writes * host_count))
+
+    if not reads and not writes and mount:
         for h in range(host_count):
             network.add_mount(h)
-        pbar.update(host_count)
 
     if reads:
         logger.info("Adding Read Interactions")
         for h in range(host_count):
             for _ in range(reads):
                 start = random.randint(0, disk_size//2)
-                end = random.randint(start, disk_size)
-                network.add_read(h, start, end)
+                len = random.randint(0, disk_size-start)
+                network.add_interaction(
+                    op_code='r', host=h, address=start, size=len, mount=mount)
             pbar.update(host_count)
 
     if writes:
@@ -155,8 +154,9 @@ def cli_cs(out_file, writes, reads, mount, host_count, disk_size, slice_size, sl
         for h in range(host_count):
             for _ in range(writes):
                 start = random.randint(0, disk_size//2)
-                end = random.randint(start, disk_size)
-                network.add_write(h, start, end)
+                len = random.randint(0, disk_size-start)
+                network.add_interaction(
+                    op_code='w', host=h, address=start, size=len, mount=mount)
             pbar.update(host_count)
 
     logger.info(f"Writing goal file to '{out_file}'")

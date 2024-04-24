@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 DEFAULT_DUMP_DIR: str = str((
-    Path(tempfile.gettempdir()) / "trace2goal" / f"exec_{round(time.time())}"
+    Path(tempfile.gettempdir()) / "trace2goal" / f"exec_{round(100 * time.time())}"
 ).absolute())
 
 Addr = int

@@ -9,8 +9,8 @@ mkdir -p "$DEST_DIR"
 
 # Iterate over each range as specified
 for host_count in 1 2; do
-    for no_reads in 0 1; do
-        for no_writes in 0 1; do
+    for no_reads in 0 1 2 3; do
+        for no_writes in 0 1 2 3; do
             for mount in "no-mount" "mount"; do
                 base_name="${DEST_DIR}/host-${host_count}_writes-${no_writes}_reads-${no_reads}_${mount}"
 
@@ -26,7 +26,7 @@ for host_count in 1 2; do
                        --writes ${no_writes} --reads ${no_reads} \
                        --${mount} --disk-size 1 \
                        --rank-names-dest "${base_name}_topology.json"\
-                       "${base_name}.goal" > /dev/null
+                       "${base_name}.goal" # > /dev/null
                 echo "Done: ${base_name}.goal"
             done
         done
