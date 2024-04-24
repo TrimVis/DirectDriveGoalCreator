@@ -5,7 +5,7 @@ MODULE_PARENT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd
 
 # Check if venv exists, and create if not
 VENV_DIR="${MODULE_PARENT}/venv"
-if [[ ! -d VENV_DIR ]]; then
+if [[ ! -d "$VENV_DIR" ]]; then
     echo "No venv detected, creating one and installing dependencies!"
     python -m venv "${VENV_DIR}"
     source "${VENV_DIR}/bin/activate"
