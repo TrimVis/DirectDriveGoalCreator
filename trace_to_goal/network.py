@@ -282,10 +282,10 @@ class DirectDriveNetwork:
             self.host_dependencies[asu] = self.add_mount(asu)
 
         deps = self.host_dependencies[asu] if self.op_depens else []
-        if op_code == "r":
+        if op_code.lower() == "r":
             self.host_dependencies[asu] = self.add_read(
                 asu, address, size, depends_on=deps)
-        elif op_code == "w":
+        elif op_code.lower() == "w":
             self.host_dependencies[asu] = self.add_write(
                 asu, address, size, depends_on=deps)
         else:
