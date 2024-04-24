@@ -279,6 +279,7 @@ class DirectDriveNetwork:
                         address: int, size: int, mount: bool = True):
         # Add mount on first interaction
         if host not in self.known_hosts:
+            self.known_hosts.append(host)
             self.host_dependencies[host] = self.add_mount(
                 host) if mount else []
 
