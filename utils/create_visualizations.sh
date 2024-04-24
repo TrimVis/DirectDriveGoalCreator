@@ -24,9 +24,9 @@ for f in "$SRC_DIR"/*.goal; do
     BPATH_TRACE_ADVANCED="${SRC_DIR}/trace/advanced/${BNAME}.trace"
     BPATH_TRACE_SIMPLE="${SRC_DIR}/trace/simple/${BNAME}.trace"
 
-    # Run in loggopssim and create viz files, exit in case of errors
     rm temp.bin;
 
+    # Run in loggopssim and create viz files, exit in case of errors
     if ! "$TXT2BIN" -i "$f" -o temp.bin; then
         echo "Error during txt2bin execution..."
         echo "Skipping!"
@@ -67,6 +67,8 @@ for f in "$SRC_DIR"/*.goal; do
 
     echo "Done!"
 done; 
+
+rm temp.bin;
 
 
 
